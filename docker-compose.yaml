@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   server:
-    image: ghcr.io/mbroton/playwright-distributed/server:latest
+    image: ghcr.io/mbroton/browserthing/server:latest
     environment:
       # A server with zero API keys runs in unauthenticated bootstrap mode.
       # Create the first key: docker compose exec server server apikey create --name <name>
@@ -42,7 +42,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ghcr.io/mbroton/playwright-distributed/worker:latest
+    image: ghcr.io/mbroton/browserthing/worker:latest
     init: true
     security_opt:
       - seccomp=./worker/seccomp_profile.json

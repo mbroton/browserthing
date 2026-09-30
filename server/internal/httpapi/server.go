@@ -69,7 +69,7 @@ func New(
 		option(&settings)
 	}
 	mux := http.NewServeMux()
-	config := huma.DefaultConfig("Playwright Distributed Control Plane", "1.0.0")
+	config := huma.DefaultConfig("BrowserThing Control Plane", "1.0.0")
 	config.DocsPath = ""
 	config.OpenAPIPath = ""
 	config.SchemasPath = ""

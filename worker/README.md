@@ -55,7 +55,7 @@ profile next to it, same as the quick start:
 ```yaml
 services:
   worker:
-    image: ghcr.io/mbroton/playwright-distributed/worker:latest
+    image: ghcr.io/mbroton/browserthing/worker:latest
     init: true
     security_opt:
       - seccomp=./worker/seccomp_profile.json

@@ -388,7 +388,7 @@ components:
       scheme: bearer
       type: http
 info:
-  title: Playwright Distributed Control Plane
+  title: BrowserThing Control Plane
   version: 1.0.0
 openapi: 3.1.0
 paths:
