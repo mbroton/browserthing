@@ -19,10 +19,10 @@ try {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    await page.setContent('<title>Playwright Distributed smoke test</title>');
+    await page.setContent('<title>BrowserThing smoke test</title>');
 
     const title = await page.title();
-    if (title !== 'Playwright Distributed smoke test') {
+    if (title !== 'BrowserThing smoke test') {
         throw new Error(`Unexpected page title: ${title}`);
     }
 

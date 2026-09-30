@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="assets/logo.png" alt="playwright-distributed logo" width="160">
-</p>
-
-<h1 align="center">playwright-distributed</h1>
+<h1 align="center">BrowserThing</h1>
 
 <p align="center">
   <strong>Turn any Docker host into a browser grid.</strong><br/>
@@ -10,11 +6,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mbroton/playwright-distributed/actions/workflows/ci.yml"><img src="https://github.com/mbroton/playwright-distributed/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/mbroton/playwright-distributed?color=blue" alt="License"></a>
+  <a href="https://github.com/mbroton/browserthing/actions/workflows/ci.yml"><img src="https://github.com/mbroton/browserthing/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/mbroton/browserthing?color=blue" alt="License"></a>
 </p>
 
 ---
+
+BrowserThing was previously named `playwright-distributed`.
+For existing installations, see [upgrading after the rename](#upgrading-after-the-rename).
 
 Start workers anywhere — they register themselves. Every connection gets its
 own isolated session on a browser that is already running. Which worker
@@ -26,8 +25,8 @@ grid's problem, not your code's.
 **1. Start the grid** — the server, PostgreSQL, and one Chromium worker:
 
 ```bash
-curl -LO https://raw.githubusercontent.com/mbroton/playwright-distributed/main/docker-compose.yaml
-curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.com/mbroton/playwright-distributed/main/worker/seccomp_profile.json
+curl -LO https://raw.githubusercontent.com/mbroton/browserthing/main/docker-compose.yaml
+curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.com/mbroton/browserthing/main/worker/seccomp_profile.json
 docker compose up -d
 ```
 
@@ -89,7 +88,7 @@ connect with `firefox.connect('ws://host:8080/?browser=firefox')`.
 
 Self-hosted, Playwright-native options:
 
-| | playwright-distributed | Browserless | Aerokube Moon |
+| | BrowserThing | Browserless | Aerokube Moon |
 |---|---|---|---|
 | License | Apache-2.0 | SSPL-1.0 or commercial | commercial, free up to 4 parallel browsers |
 | Runs on | any Docker host | any Docker host | Kubernetes / OpenShift only |
@@ -106,7 +105,7 @@ sessions run on browsers that are already warm. Side by side on an AWS
 `m8i.xlarge` (4 vCPUs, 16 GB), same Playwright version, one worker vs one
 node:
 
-| | playwright-distributed | Browserless |
+| | BrowserThing | Browserless |
 |---|---|---|
 | Get a browser, open a page, read it | **51 ms** | 217 ms |
 | CPU used per task | **0.09 s** | 0.70 s |
@@ -138,7 +137,7 @@ around each page nor per-session browser flags.
 flowchart TD
     Client[(Your Playwright code)] -->|WebSocket| Server
 
-    subgraph playwright-distributed
+    subgraph BrowserThing
         direction LR
 
         Server -->|sessions, workers, API keys| PostgreSQL[(PostgreSQL)]
@@ -187,6 +186,25 @@ Kubernetes):
 
 See [`server/README.md`](server/README.md) for the full configuration and
 API reference.
+
+### Upgrading after the rename
+
+The container image paths are now
+`ghcr.io/mbroton/browserthing/server` and
+`ghcr.io/mbroton/browserthing/worker`. Existing images under
+`ghcr.io/mbroton/playwright-distributed/` remain available, but new releases
+use only the `browserthing` paths. Update your image references to receive
+future releases.
+
+Keep your existing `.env` file and Compose project name when upgrading.
+If you rename the deployment directory, first find the existing project name
+with `docker compose ls`, then set `COMPOSE_PROJECT_NAME=<existing-name>` in
+`.env`. This keeps Compose connected to the existing PostgreSQL volume.
+
+The rename does not change the database name or user (`pwd`), API key format
+(`pwd_...`), or worker session header (`x-pwd-session-id`). Existing keys and
+server/worker connections remain compatible. Client and worker Playwright
+versions must still match as described in the quick start.
 
 ### Security boundary
 

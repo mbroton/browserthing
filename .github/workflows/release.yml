@@ -8,6 +8,10 @@ permissions:
   contents: write
   packages: write
 
+# Use the new image paths even before the GitHub repository is renamed.
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/browserthing
+
 # A release must not be cancelled between the two image pushes. The called
 # ci.yml cancels its own group, and its group name resolves with this
 # workflow's name, so keep this name clearly different from `Release-<ref>`.
@@ -95,9 +99,8 @@ jobs:
 
       # docker-compose.yaml is the documented deployment path and pins the
       # `latest` tags, so the smoke test loads the built images under those
-      # names and runs that file unchanged. The compose file hardcodes the
-      # upstream image names, so in a fork these tags diverge from
-      # `github.repository` and this smoke test fails until both match.
+      # names and runs that file unchanged. In a fork, update the compose
+      # image owner to match IMAGE_PREFIX before releasing.
       - name: Load the amd64 images under their deployment tags
         uses: docker/build-push-action@v6
         with:
@@ -106,7 +109,7 @@ jobs:
           load: true
           platforms: linux/amd64
           cache-from: type=gha,scope=server
-          tags: ghcr.io/${{ github.repository }}/server:latest
+          tags: ${{ env.IMAGE_PREFIX }}/server:latest
 
       - name: Load the amd64 worker image under its deployment tag
         uses: docker/build-push-action@v6
@@ -116,7 +119,7 @@ jobs:
           load: true
           platforms: linux/amd64
           cache-from: type=gha,scope=worker
-          tags: ghcr.io/${{ github.repository }}/worker:latest
+          tags: ${{ env.IMAGE_PREFIX }}/worker:latest
 
       # A visitor runs the quick start from an empty directory that holds only
       # the files the README tells them to download. Mirror that layout so a
@@ -182,7 +185,7 @@ jobs:
         id: meta-server
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/server
+          images: ${{ env.IMAGE_PREFIX }}/server
           # `latest=auto` keeps a pre-release tag from moving `latest`.
           flavor: latest=auto
           tags: |
@@ -194,7 +197,7 @@ jobs:
         id: meta-worker
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/worker
+          images: ${{ env.IMAGE_PREFIX }}/worker
           flavor: latest=auto
           tags: |
             type=semver,pattern={{version}}
@@ -225,16 +228,14 @@ jobs:
           tags: ${{ steps.meta-worker.outputs.tags }}
           labels: ${{ steps.meta-worker.outputs.labels }}
 
-      # docker-compose.yaml deploys `latest`. Prove the tag now points at the
-      # images built for this release, so the documented deployment and the
-      # GitHub release can never name different images. Pre-releases do not
-      # move `latest`, so there is nothing to prove for them.
+      # Verify the quick start image tags resolve to this release.
+      # Pre-releases do not move `latest`, so skip this check for them.
       - name: Verify docker-compose.yaml deploys the released images
         if: ${{ !contains(github.ref_name, '-') }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           for service in server worker; do
-            image="ghcr.io/${{ github.repository }}/${service}"
+            image="${IMAGE_PREFIX}/${service}"
             if ! grep -qF "image: ${image}:latest" docker-compose.yaml; then
               echo "docker-compose.yaml does not deploy ${image}:latest" >&2
               exit 1
