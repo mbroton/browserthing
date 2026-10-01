@@ -12,6 +12,9 @@
 
 ---
 
+[Website](https://mbroton.github.io/browserthing/) ·
+[Documentation](https://mbroton.github.io/browserthing/docs/)
+
 BrowserThing was previously named `playwright-distributed`.
 For existing installations, see [upgrading after the rename](#upgrading-after-the-rename).
 
@@ -163,7 +166,8 @@ flowchart TD
   are rows. Sessions of dead workers are closed out automatically, so
   capacity recovers without intervention.
 - **Recycling**: after a configurable number of sessions, a worker drains
-  and restarts with a fresh browser. Selection concentrates load on the
+  and replaces its browser without restarting the container. Sessions still
+  running after `DRAIN_TIMEOUT` are closed. Selection concentrates load on the
   longest-serving worker, so recycles tend to happen one worker at a time.
 
 ## Production deployment

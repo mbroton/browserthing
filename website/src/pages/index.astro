@@ -1,0 +1,67 @@
+---
+import { Code } from 'astro:components';
+import '../styles/landing.css';
+
+const base = import.meta.env.BASE_URL;
+const repo = 'https://github.com/mbroton/browserthing';
+const description = 'A distributed browser pool for Playwright.';
+const example = `import { chromium } from 'playwright';
+
+const browser = await chromium.connect('ws://localhost:8080');
+const context = await browser.newContext();
+const page = await context.newPage();
+
+await page.goto('https://example.com');
+console.log(await page.title());
+await browser.close();`;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="color-scheme" content="dark" />
+    <title>BrowserThing — A browser pool for Playwright</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={new URL(base, Astro.site)} />
+    <link rel="icon" type="image/svg+xml" href={`${base}browserthing-icon.svg`} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="BrowserThing" />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={new URL(base, Astro.site)} />
+    <meta name="theme-color" content="#111111" />
+  </head>
+  <body>
+    <main>
+      <h1>BrowserThing</h1>
+      <p class="description">{description}</p>
+
+      <nav aria-label="Project links">
+        <a href={`${base}docs/`}>Documentation</a>
+        <a href={repo}>GitHub</a>
+        <a href={`${repo}/releases`}>Releases</a>
+      </nav>
+
+      <p>
+        BrowserThing keeps browsers running and connects your Playwright code
+        to them through one endpoint. Each connection gets a separate session
+        on an available worker. Add workers to run more sessions on one machine
+        or across several. Workers run Chromium, Firefox, or WebKit.
+      </p>
+
+      <figure>
+        <figcaption>example.mjs</figcaption>
+        <Code code={example} lang="js" theme="github-dark-dimmed" tabindex="0" />
+      </figure>
+
+      <p class="note">
+        Sessions use separate browser contexts and share a browser process on
+        each worker. Setup and Playwright version requirements are in the <a href={`${base}docs/quick-start/`}>quick start</a>.
+      </p>
+
+      <footer>
+        <span>Built by <a href="https://broton.dev">mbroton</a></span>
+      </footer>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "browserthing-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "check": "astro check",
+    "build": "astro build && node scripts/check-docs-output.mjs",
+    "preview": "astro preview"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=9.6.5"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.4",
+    "astro": "7.3.5",
+    "starlight-links-validator": "0.26.0",
+    "starlight-llms-txt": "0.12.0",
+    "starlight-page-actions": "0.7.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "~5.9.3"
+  }
+}
