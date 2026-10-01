@@ -13,12 +13,23 @@ API) and a TypeScript Playwright worker.
 - Worker code uses ES modules. Keep explicit `.js` suffixes in local imports.
 - Avoid unrelated refactors, dependencies, or repository-wide tooling changes.
 
+## Documentation
+
+- Before shipping a change, review its effect on users and update the affected
+  documentation in the same pull request.
+- Keep the documentation website (`website/src/content/docs/docs/`), relevant
+  README files, API reference (`server/openapi.yaml`), and examples consistent
+  with the shipped behavior, configuration, and version requirements.
+- Document migration steps and compatibility limits in the upgrade guide and
+  other affected guides when they apply.
+
 ## Verification
 
 - Server changes: run `cd server && go test ./...` (needs a running Docker
   daemon for testcontainers).
 - Worker code changes: run `cd worker && npm test && npm run typecheck`.
 - Playwright version changes: run `node scripts/check-playwright-version.js`.
+- Website changes: run `cd website && npm run check && npm run build`.
 - Worker runtime changes: smoke-test with
   `docker compose -f docker-compose.local.yaml up --build`.
 - Run the checks relevant to the change and report anything you could not run.
