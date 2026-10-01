@@ -1,9 +1,13 @@
 # Worker
 
+A BrowserThing worker keeps a browser running for your applications. Application
+code controls it through Playwright. Run workers on separate hosts to keep browser
+CPU and memory use off application servers.
+
 A worker is a container that keeps one browser running and serves up to
-`MAX_SLOTS` concurrent sessions on it, each in its own isolated context. It
-registers itself with the server on start; configuration is environment
-variables (see [`.env.example`](.env.example)).
+`MAX_SLOTS` concurrent sessions on it. Sessions use separate browser contexts
+and share the browser process. The worker registers itself with the server on
+start; configuration is environment variables (see [`.env.example`](.env.example)).
 
 ## Tuning `MAX_SLOTS`
 
@@ -24,7 +28,7 @@ many sessions a browser crash or recycle can take down with it.
 
 ## Scaling beyond one machine
 
-The grid has two kinds of parts: one **server with its PostgreSQL** (the
+The service has two kinds of parts: one **server with its PostgreSQL** (the
 control plane, and the relay every session flows through) and any number of
 **workers**, which can run on any host that can reach the server. Workers
 are disposable: start one and it registers itself, stop one and it drains.

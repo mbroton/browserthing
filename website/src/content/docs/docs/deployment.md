@@ -1,14 +1,18 @@
 ---
 title: Deployment
-description: Configure authentication, private networking, and persistent data for BrowserThing.
+description: Deploy an internal browser service for your applications with authentication, private networking, and persistent data.
 ---
 
 Start with the [quick start](/browserthing/docs/quick-start/). For a deployment used by other
 machines, configure the database password, API keys, and network access before
 you expose the server.
 
+You operate and update this service for your applications. To move browser CPU
+and memory use off application servers, deploy workers on separate hosts. The
+[scaling guide](/browserthing/docs/scaling/) shows the required network connections.
+
 ```text
-Clients -> TLS proxy -> Server -> private browser workers
+Apps -> TLS proxy -> Server -> private browser workers
                           |
                           v
                      PostgreSQL
@@ -39,7 +43,7 @@ docker compose exec server server apikey create --name grid
 ```
 
 Save the returned key. Creating it immediately enables authentication across
-the grid. Set the worker key in `.env`:
+the service. Set the worker key in `.env`:
 
 ```dotenv
 WORKER_API_KEY=pwd_replace_with_your_key

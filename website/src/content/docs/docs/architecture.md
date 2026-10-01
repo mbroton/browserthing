@@ -3,11 +3,13 @@ title: Architecture
 description: How BrowserThing routes sessions, keeps browsers warm, and recovers worker capacity.
 ---
 
-BrowserThing has a Go server, a PostgreSQL database, and TypeScript Playwright
-workers. Each worker keeps one browser process running.
+Your application runs the Playwright code that controls browser tasks.
+BrowserThing runs the browsers and manages their sessions through
+a Go server, a PostgreSQL database, and TypeScript Playwright workers.
+Each worker keeps one browser process running between tasks.
 
 ```text
-Playwright clients
+Applications using Playwright
         |
         | WebSocket
         v
@@ -69,8 +71,9 @@ Selection concentrates load on longer-serving workers to stagger recycling.
 Dead workers lose their sessions, and the server closes out their records so
 capacity can recover.
 
-If a browser crashes, all sessions on that worker end. The grid restores
+If a browser crashes, all sessions on that worker end. BrowserThing restores
 capacity; your client code must decide whether to retry its work.
 
-Read the [security boundary](/browserthing/docs/security/) before you use the grid for clients
-that do not trust each other.
+Sessions separate cookies and storage but share a browser process on each
+worker. See the [security boundary](/browserthing/docs/security/) for client trust
+and network access requirements.

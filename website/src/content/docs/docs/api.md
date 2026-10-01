@@ -117,13 +117,13 @@ try {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('https://example.com');
-  console.log(await page.title());
+  await page.screenshot({ path: 'preview.png', fullPage: true });
 } finally {
   await browser.close();
 }
 ```
 
-Run `node create-session.mjs`. It prints `Example Domain`.
+Run `node create-session.mjs`. It saves `preview.png` on the client machine.
 
 This attaches to a pending session. It does not resume a session after its
 connection has closed. The connecting client's major and minor version must

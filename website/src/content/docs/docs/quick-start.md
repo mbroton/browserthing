@@ -1,11 +1,16 @@
 ---
 title: Quick start
-description: Start BrowserThing with Docker Compose and connect your first Playwright client.
+description: Start BrowserThing with Docker Compose and connect your application code to a browser worker with Playwright.
 ---
 
 You need Docker with the Compose plugin, `curl`, and Node.js 20 or later for the
-client example. The grid runs its browsers in containers. You do not need to
+client example. BrowserThing runs its browsers in containers. You do not need to
 install browsers on the client machine.
+
+This local setup runs the service and its browser worker on your machine.
+For your application deployment, you can move workers to
+[separate hosts](/browserthing/docs/scaling/#add-workers-on-other-hosts) so browser
+CPU and memory use stays off your application servers.
 
 ## 1. Download the configuration
 
@@ -22,7 +27,7 @@ curl -fsSL --create-dirs -o worker/seccomp_profile.json https://raw.githubuserco
 This site's Compose file pins both BrowserThing images to `0.6.0`. It starts
 PostgreSQL, the server, and one Chromium worker with five session slots.
 
-## 2. Start the grid
+## 2. Start the service
 
 ```sh
 docker compose up -d
@@ -37,10 +42,10 @@ does not register.
 :::note[Local setup]
 The server listens on `127.0.0.1:8080`. This example uses the Compose file's local
 database password and starts without API keys. Follow the
-[deployment guide](/browserthing/docs/deployment/) before you expose the grid to other machines.
+[deployment guide](/browserthing/docs/deployment/) before you expose the service to other machines.
 :::
 
-## 3. Connect a client
+## 3. Run a browser task
 
 Install the matching Playwright client:
 
@@ -49,7 +54,8 @@ npm init -y
 npm install playwright@1.63.0
 ```
 
-Save this as `hello-browser.mjs`:
+Save this as `preview.mjs`. This example saves a screenshot. Replace the task
+with the browser actions your application needs:
 
 ```js
 import { chromium } from 'playwright';
@@ -59,7 +65,7 @@ try {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto('https://example.com');
-  console.log(await page.title());
+  await page.screenshot({ path: 'preview.png', fullPage: true });
 } finally {
   await browser.close();
 }
@@ -68,14 +74,12 @@ try {
 Run it:
 
 ```sh
-node hello-browser.mjs
+node preview.mjs
 ```
 
-Expected output:
-
-```text
-Example Domain
-```
+Open `preview.png` in the current directory to see the result. The browser runs
+on the worker, and Playwright saves the screenshot on the client machine.
+Closing the connection releases the session's resources for the next task.
 
 The client and worker must have the same Playwright **major and minor** version.
 For these images, use `1.63.x`.
@@ -88,7 +92,7 @@ Start three workers for 15 concurrent session slots:
 docker compose up -d --scale worker=3
 ```
 
-Stop the grid and keep its database volume:
+Stop the service and keep its database volume:
 
 ```sh
 docker compose down

@@ -11,7 +11,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'BrowserThing',
-      description: 'A distributed browser pool for Playwright.',
+      description: 'A self-hosted browser service for Playwright. Use browsers from your application code while BrowserThing runs and manages them on separate workers.',
       favicon: '/browserthing-icon.svg',
       disable404Route: true,
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mbroton/browserthing' }],
@@ -30,8 +30,9 @@ export default defineConfig({
           { slug: 'docs' },
           { slug: 'docs/quick-start' },
           { slug: 'docs/connect' },
+          { slug: 'docs/benchmarks' },
         ] },
-        { label: 'Run your grid', items: [
+        { label: 'Run your browser service', items: [
           { slug: 'docs/architecture' },
           { slug: 'docs/deployment' },
           { slug: 'docs/scaling' },

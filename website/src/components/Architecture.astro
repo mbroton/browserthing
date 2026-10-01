@@ -7,7 +7,7 @@ const code = [
   [');', 'connect'],
   ['const page = await browser.newPage();', 'run'],
   ["await page.goto('https://example.com');", 'run'],
-  ['console.log(await page.title());', 'run'],
+  ["await page.screenshot({ path: 'preview.png' });", 'run'],
   ['await browser.close();', ''],
 ];
 const workers = [
@@ -19,17 +19,17 @@ const workers = [
 
 <section class="architecture" id="how-it-works" data-step="0" aria-labelledby="architecture-title" aria-describedby="architecture-description">
   <h2 id="architecture-title">How it works</h2>
-  <p id="architecture-description" class="visually-hidden">Your regular Playwright code connects to BrowserThing. The service selects a matching worker with a free session slot, skips full workers, and relays your browser commands and results.</p>
+  <p id="architecture-description" class="visually-hidden">Your application's Playwright code connects to BrowserThing. The service selects an available browser worker and relays commands and results. Browsers stay running between tasks. This example saves a screenshot.</p>
   <div class="stage">
     <div class="service-area" aria-hidden="true"></div>
     <div class="service-label" aria-hidden="true"><strong>BrowserThing</strong><span>Your browser service</span></div>
 
     <div class="code-window">
       <div class="code-bar">
-        <span>example.mjs <span class="app-label">/ your app</span></span>
+        <span>preview.mjs <span class="app-label">/ your app</span></span>
       </div>
-      <pre class="demo-code" tabindex="0" aria-label="Regular Playwright code"><code>{code.map(([line, kind]) => <span class:list={['code-line', kind]}>{line || ' '}</span>)}</code></pre>
-      <div class="code-result" aria-hidden="true"><span>↳</span> Example Domain</div>
+      <pre class="demo-code" tabindex="0" aria-label="Example browser task: save a screenshot"><code>{code.map(([line, kind]) => <span class:list={['code-line', kind]}>{line || ' '}</span>)}</code></pre>
+      <div class="code-result" aria-hidden="true"><span>↳</span> preview.png saved in your app</div>
     </div>
 
     <div class="client-connection" aria-hidden="true">
@@ -71,7 +71,7 @@ const workers = [
       <span class="pool-note">Browsers stay running.</span>
     </div>
   </div>
-  <noscript><p>Your Playwright code connects to BrowserThing. The service selects a matching worker with a free session slot and relays your browser commands.</p></noscript>
+  <noscript><p>Your application's Playwright code connects to BrowserThing. The service runs the browser on a worker and relays commands and results. This example saves a screenshot.</p></noscript>
 </section>
 
 <script>

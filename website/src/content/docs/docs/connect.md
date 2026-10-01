@@ -1,18 +1,22 @@
 ---
 title: Connect with Playwright
-description: Connect Node.js and Python clients to BrowserThing and choose a browser type.
+description: Connect your application's Playwright code to BrowserThing from Node.js or Python.
 ---
 
-Use Playwright's `connect()` method with the BrowserThing WebSocket URL.
-The server selects an available worker that matches the browser type and the
-client's Playwright major and minor version.
+Use Playwright's `connect()` method in your application with the BrowserThing
+WebSocket URL. The server selects an available worker that matches the browser
+type and the client's Playwright major and minor version.
 
 ```text
-Playwright client -> ws://localhost:8080 -> matching browser worker
+Application -> Playwright commands -> Browser worker
+            <- Results            <-
 ```
 
 BrowserThing v0.6.0 images use Playwright **1.63.0**. The examples below use that
 version. Use `wss://` when your endpoint has TLS.
+
+The examples save a screenshot as a small browser task. Use the same connection
+for the browser actions your application needs.
 
 ## Node.js
 
@@ -32,13 +36,14 @@ try {
   });
   const page = await context.newPage();
   await page.goto('https://example.com');
-  console.log(await page.title());
+  await page.screenshot({ path: 'preview.png', fullPage: true });
 } finally {
   await browser.close();
 }
 ```
 
-Run `node connect.mjs`. It prints `Example Domain`.
+Run `node connect.mjs`. It saves `preview.png` in the current directory on the
+client machine. Replace `https://example.com` with your application's page URL.
 
 ## Python
 
@@ -60,7 +65,7 @@ async def main():
             context = await browser.new_context()
             page = await context.new_page()
             await page.goto("https://example.com")
-            print(await page.title())
+            await page.screenshot(path="preview.png", full_page=True)
         finally:
             await browser.close()
 
@@ -68,10 +73,32 @@ async def main():
 asyncio.run(main())
 ```
 
-Run `python connect.py`. It prints `Example Domain`.
+Run `python connect.py`. It saves `preview.png` in the current directory on the
+client machine.
 
 Java and .NET clients use their corresponding `BrowserType.connect()` /
 `ConnectAsync()` methods with the same endpoint and version requirement.
+
+## PDF exports
+
+Use a Chromium worker for PDF generation. In either example above, replace the
+screenshot call with a PDF call after the page has loaded:
+
+```js
+await page.pdf({ path: 'report.pdf', format: 'A4', printBackground: true });
+```
+
+```python
+await page.pdf(path="report.pdf", format="A4", print_background=True)
+```
+
+Playwright saves `report.pdf` on the client machine. [PDF generation](https://playwright.dev/docs/api/class-page#page-pdf) uses print
+styles by default. To use screen styles, call `page.emulateMedia({ media: 'screen' })`
+in Node.js or `page.emulate_media(media="screen")` in Python before the PDF call.
+
+For an application response or file upload, omit `path` from `screenshot()` or
+`pdf()` and use the returned bytes. Your application decides where to store or
+send the result.
 
 ## Firefox and WebKit
 
@@ -109,7 +136,7 @@ const browser = await chromium.connect('wss://grid.example.com', {
 ```
 
 Clients can also pass `?token=pwd_...` in the URL. Keep keys out of source control
-and shared logs. Every valid key has full access to the grid in v0.6.0. See
+and shared logs. Every valid key has full access to the service in v0.6.0. See
 [security](/browserthing/docs/security/).
 
 ## Session lifetime

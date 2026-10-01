@@ -1,8 +1,8 @@
 <h1 align="center">BrowserThing</h1>
 
 <p align="center">
-  <strong>Turn any Docker host into a browser grid.</strong><br/>
-  Warm <a href="https://playwright.dev/">Playwright</a> browsers behind one endpoint — connect from any language with one line.
+  <strong>Use Playwright in your app. Run browsers elsewhere.</strong><br/>
+  A self-hosted browser service for <a href="https://playwright.dev/">Playwright</a>. Use browsers from your application code while BrowserThing runs and manages them on separate workers.
 </p>
 
 <p align="center">
@@ -15,17 +15,26 @@
 [Website](https://mbroton.github.io/browserthing/) ·
 [Documentation](https://mbroton.github.io/browserthing/docs/)
 
+Write browser tasks in your application code and connect to BrowserThing through
+one endpoint. BrowserThing keeps browsers running between tasks and handles
+session cleanup and browser recycling. Your team deploys and updates the service;
+each application uses it through Playwright.
+
+Run workers on separate machines to keep browser CPU and memory use off your
+application servers. Add workers when you need more browser capacity.
+
+```text
+Your application                 BrowserThing
+Playwright commands ---------->  Browser workers
+Results             <----------  Browsers stay running
+```
+
 BrowserThing was previously named `playwright-distributed`.
 For existing installations, see [upgrading after the rename](#upgrading-after-the-rename).
 
-Start workers anywhere — they register themselves. Every connection gets its
-own isolated session on a browser that is already running. Which worker
-serves you, what happens when one dies, when a browser gets recycled — the
-grid's problem, not your code's.
-
 ## Quick start
 
-**1. Start the grid** — the server, PostgreSQL, and one Chromium worker:
+**1. Start the service** — the server, PostgreSQL, and one Chromium worker:
 
 ```bash
 curl -LO https://raw.githubusercontent.com/mbroton/browserthing/main/docker-compose.yaml
@@ -33,25 +42,34 @@ curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.
 docker compose up -d
 ```
 
-**2. Connect** — you get a fresh session (in milliseconds — see
-[the comparison](#warm-browsers-vs-a-browser-per-session)); do your work
-and close, everything is cleaned up for the next client:
+**2. Run a browser task** with a matching Playwright client. This example saves
+a screenshot. Replace the task with the browser actions your application needs:
 
 ```js
 import { chromium } from 'playwright';
 
 const browser = await chromium.connect('ws://localhost:8080');
-const page = await (await browser.newContext()).newPage();
-await page.goto('https://example.com');
-console.log(await page.title());
-await browser.close();
+try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto('https://example.com');
+  await page.screenshot({ path: 'preview.png', fullPage: true });
+} finally {
+  await browser.close();
+}
 ```
+
+The client saves `preview.png` locally. BrowserThing releases the session's
+resources when the connection closes, so the browser can serve the next task.
+This local setup runs workers on your machine. Use
+[separate worker hosts](worker/README.md#scaling-beyond-one-machine) to move
+browser resource use off your application server.
 
 > Your client's Playwright `major.minor` version must match a registered
 > worker's version — the server routes each client to a version-matched
 > worker.
 
-That's the whole setup. When you need more browsers, add workers — each
+When you need more browser capacity, add workers. Each
 serves up to `MAX_SLOTS` (default 5,
 [how to tune it](worker/README.md)) concurrent sessions:
 
@@ -66,47 +84,34 @@ connect with `firefox.connect('ws://host:8080/?browser=firefox')`.
 
 ## What you get
 
-- **One endpoint, every Playwright client.** The same `ws://` URL works from
-  Node.js, Python, Java, and .NET — Chromium, Firefox, and WebKit alike.
-- **No browser launch on the request path.** Connecting is a WebSocket dial,
-  not a cold start.
-- **Parallel, isolated sessions.** Each worker serves several sessions at
-  once; sessions never see each other.
-- **Self-healing capacity.** Workers register themselves and dead workers'
-  sessions are closed out automatically — no operator in the loop.
-- **Your infrastructure.** Data stays on your network. There is no
-  per-session bill.
+- **Playwright in your application.** Use the usual API from Node.js, Python,
+  Java, or .NET through one endpoint. Workers support Chromium, Firefox, and WebKit.
+- **Browsers ready between tasks.** Reuse running browsers to avoid launching
+  a browser for every task.
+- **Separate browser capacity.** Run workers on their own hosts and add capacity
+  without adding application instances.
+- **Browser management in one service.** Workers handle session cleanup and
+  browser recycling. Applications close their connections when work is done.
+- **Your infrastructure.** Deploy the service on your own machines under the
+  Apache-2.0 license.
 
-## Who it's for
+## One browser service for your applications
 
-| You run | The grid gives you |
-|---------|--------------------|
-| AI agents | An isolated browser per agent, available the moment the agent asks. |
-| Scraping pipelines | Throughput that scales by adding workers, and shrinks to save money. |
-| CI end-to-end tests | Parallel browsers without installing them on every runner. |
-| Synthetic monitoring | Long-running checks on browsers that recycle themselves. |
-| A platform team | One internal browser endpoint instead of a browser install per team. |
+Keep the steps of each browser task in your application code. Use Playwright to
+navigate pages, interact with them, and use the results in your application.
+Connect when a task needs a browser and close the connection when it finishes.
+BrowserThing selects a worker and handles browser startup, cleanup, and recycling.
 
-## How it compares
+Several applications can share the same internal service. Browser capacity and
+updates are managed in one place, separate from each application's code.
 
-Self-hosted, Playwright-native options:
+## Warm browsers vs a browser per session
 
-| | BrowserThing | Browserless | Aerokube Moon |
-|---|---|---|---|
-| License | Apache-2.0 | SSPL-1.0 or commercial | commercial, free up to 4 parallel browsers |
-| Runs on | any Docker host | any Docker host | Kubernetes / OpenShift only |
-| Parallel sessions | ✅ workers × `MAX_SLOTS` | ✅ per-instance cap | ✅ capped by license |
-| Scales beyond one machine | ✅ built in — start more workers on any host | ✅ more containers behind your own load balancer | ✅ |
-| Browsers stay warm between sessions | ✅ | ❌ launched per session | ❌ pod launched per session |
-| Session records and control (REST) | ✅ with history | live only | live UI |
-
-### Warm browsers vs a browser per session
-
-The biggest practical difference in the table is how a session gets its
-browser. Browserless starts a fresh browser for every connection; here,
-sessions run on browsers that are already warm. Side by side on an AWS
-`m8i.xlarge` (4 vCPUs, 16 GB), same Playwright version, one worker vs one
-node:
+Browser startup adds time and CPU use to short tasks. BrowserThing keeps browsers
+running between connections. In this benchmark, each task opened and closed a
+Playwright connection, and Browserless 2.56.0 launched a new browser process for
+each connection. The comparison used an AWS `m8i.xlarge` (4 vCPUs, 16 GB), the
+same Playwright version, one BrowserThing worker, and one Browserless node:
 
 | | BrowserThing | Browserless |
 |---|---|---|
@@ -114,31 +119,30 @@ node:
 | CPU used per task | **0.09 s** | 0.70 s |
 | 1,000 such tasks, 5 at a time | **26 s** | 154 s |
 
-The saving repeats on every session, so it adds up fastest for services that
-open and close browsers all day.
+These results measure a short page-read task.
+They show the overhead saved when tasks open and close connections frequently.
+Browserless also supports session reuse, which this benchmark did not use. See
+[benchmark details](https://mbroton.github.io/browserthing/docs/benchmarks/).
+Measure your own pages to estimate the benefit for your application.
 
-Sharing a warm browser is a trade. Each session is an isolated browser
-context — own cookies, storage, and cache — but it shares the browser
-process with the other sessions on its worker:
+Sessions use separate browser contexts for cookies and storage, but share the
+browser process on each worker:
 
-- A separate process is a harder wall around a hostile page (see
-  [Security boundary](#security-boundary)).
+- Browser contexts do not provide a separate operating system boundary for each
+  session. See [Security boundary](#security-boundary).
 - Browser command-line flags are set when the worker starts, so one session
   cannot bring its own — say, a browser extension — the way a
   freshly-launched browser can. Per-session proxy, locale, viewport, and
   cookies work as usual via contexts.
-- If the shared browser crashes, all sessions on that worker end with it;
-  the grid closes them out and the container restarts with a fresh browser.
-
-Many workloads never feel these limits: taking screenshots, scraping sites
-you chose, or running your own test suite needs neither a process wall
-around each page nor per-session browser flags.
+- If the shared browser crashes, all sessions on that worker end with it.
+  BrowserThing restores capacity; your application decides whether to retry
+  the task.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    Client[(Your Playwright code)] -->|WebSocket| Server
+    Client[(Your application: Playwright code)] -->|WebSocket| Server
 
     subgraph BrowserThing
         direction LR
@@ -212,8 +216,9 @@ versions must still match as described in the quick start.
 
 ### Security boundary
 
-The grid trusts every authenticated client (in bootstrap mode: every client
-that can reach the server) while letting browsers visit untrusted pages. The
+BrowserThing is built for applications you trust. It trusts every authenticated
+client (in bootstrap mode: every client that can reach the server) while letting
+browsers visit untrusted pages. The
 compose files bind the server to `127.0.0.1`, keep PostgreSQL and workers on
 an internal network, and run workers as a non-root user with Playwright's
 Chromium sandbox profile.
@@ -236,11 +241,13 @@ import asyncio
 async def main():
     async with async_playwright() as p:
         browser = await p.chromium.connect('ws://localhost:8080')
-        context = await browser.new_context()
-        page = await context.new_page()
-        await page.goto('https://example.com')
-        print(await page.title())
-        await browser.close()
+        try:
+            context = await browser.new_context()
+            page = await context.new_page()
+            await page.goto('https://example.com')
+            await page.screenshot(path='preview.png', full_page=True)
+        finally:
+            await browser.close()
 
 asyncio.run(main())
 ```
