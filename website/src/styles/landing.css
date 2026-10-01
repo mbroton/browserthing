@@ -1,0 +1,30 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-synthesis: none;
+  color: #bcbcbc;
+  background: #111111;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(100% - 40px, 680px); margin: 80px auto; }
+h1 { margin: 0; color: #eeeeee; font: 600 30px/1.3 var(--mono); letter-spacing: -.04em; }
+p { margin: 28px 0; font-size: 15px; line-height: 1.8; }
+a { color: #dedede; text-underline-offset: 4px; text-decoration-color: #666666; }
+a:hover { color: #ffffff; text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid #b5c9ef; outline-offset: 5px; }
+::selection { color: #ffffff; background: #364359; }
+.description { margin: 12px 0 20px; color: #dedede; }
+nav { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 38px; font-size: 14px; }
+figure { margin: 28px 0; border: 1px solid #303030; background: #171717; }
+figcaption { padding: 10px 16px; border-bottom: 1px solid #303030; color: #a0a0a0; font: 12px var(--mono); }
+pre { margin: 0; padding: 18px 16px; overflow-x: auto; background: #171717 !important; font: 13px/1.8 var(--mono); }
+.note { color: #a0a0a0; font-size: 13px; }
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 36px; padding-top: 18px; border-top: 1px solid #303030; color: #a0a0a0; font-size: 12px; }
+
+@media (max-width: 600px) {
+  main { margin-block: 40px; }
+  h1 { font-size: 27px; }
+}
