@@ -3,6 +3,9 @@ title: Scaling
 description: Add browser workers and tune session capacity on one host or several hosts.
 ---
 
+Scale browser capacity separately from your application instances. Put workers
+on separate hosts to move browser CPU and memory use off application servers.
+
 Capacity comes from the number of workers and the slot limit on each worker.
 For example, three workers with `MAX_SLOTS=5` provide 15 concurrent session
 slots. Actual throughput depends on CPU, memory, and the pages you open.
@@ -19,7 +22,7 @@ This lets Compose create several workers. Each worker registers itself.
 ## Add workers on other hosts
 
 ```text
-Clients -> Server + PostgreSQL (host A)
+Apps -> Server + PostgreSQL (host A)
                   |
                   +-> Workers (host B)
                   +-> Workers (host C)
@@ -72,6 +75,8 @@ spend more time waiting for pages can use more slots, provided memory permits.
 Increase capacity in steps. Measure latency, throughput, and memory with your
 own workload. Adding more workers on a fully used host does not add CPU capacity.
 The repository includes [benchmark scripts](https://github.com/mbroton/browserthing/tree/v0.6.0/scripts/bench).
+See [benchmark results](/browserthing/docs/benchmarks/) for a comparison of
+BrowserThing and Browserless on the same hardware.
 
 ## Watch the queue
 

@@ -1,16 +1,24 @@
 ---
 title: Overview
-description: Run a Playwright browser grid on your own infrastructure.
+description: Use browsers from your application code while BrowserThing runs and manages them on separate workers.
 ---
 
-BrowserThing connects Playwright clients to browsers that are already running.
-You host the server, PostgreSQL, and browser workers. Clients use one WebSocket
-endpoint. Add workers when you need more capacity.
+**Use Playwright in your app. Run browsers elsewhere.**
+
+BrowserThing is a self-hosted browser service for Playwright. Use browsers from
+your application code while BrowserThing runs and manages them on separate workers.
+Your application controls the browser actions and uses the results through Playwright.
+BrowserThing keeps browsers running between tasks and handles session cleanup
+and browser recycling.
+
+You deploy and update the server, PostgreSQL, and browser workers. Run workers
+on separate machines to keep browser CPU and memory use off your application
+servers. Add workers when you need more browser capacity.
 
 These guides describe **BrowserThing v0.6.0**, with **Playwright 1.63.0** workers.
 
 ```text
-Your Playwright code
+Your application: Playwright code
         |
         v
 BrowserThing server ---- PostgreSQL
@@ -20,13 +28,22 @@ BrowserThing server ---- PostgreSQL
         +---- WebKit workers
 ```
 
-## Start your first grid
+## Connect your application
 
-Follow the [quick start](/browserthing/docs/quick-start/) to run a local grid with Docker Compose
-and open your first page. Then see the [connection examples](/browserthing/docs/connect/) for
-Node.js, Python, and other browser types.
+Follow the [quick start](/browserthing/docs/quick-start/) to run the service locally
+with Docker Compose and connect your Playwright code. It uses a screenshot as an
+example browser task. Then see the [connection examples](/browserthing/docs/connect/)
+for Node.js, Python, and other browser types.
 
-## Run the grid
+Keep the steps of each browser task in your application. Several applications
+can share one internal browser endpoint, with browser capacity managed in one place.
+
+## Compare performance
+
+See [benchmark results](/browserthing/docs/benchmarks/) for task time and CPU use
+in a comparison with Browserless on the same hardware.
+
+## Run your browser service
 
 - [Architecture](/browserthing/docs/architecture/) explains sessions, worker selection, and recycling.
 - [Deployment](/browserthing/docs/deployment/) covers API keys, networking, and persistent data.
@@ -43,7 +60,7 @@ For a failed connection, start with [troubleshooting](/browserthing/docs/trouble
 Follow the [upgrade guide](/browserthing/docs/upgrading/) to update the server and worker images
 and preserve your database volume.
 
-## Use with AI tools
+## Read docs as Markdown
 
 Use **Copy Markdown** or **View Markdown** on any docs page. The
 [docs index](/browserthing/llms.txt) links to the

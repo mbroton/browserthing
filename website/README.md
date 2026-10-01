@@ -47,6 +47,14 @@ docs use paths starting with `/browserthing/`, such as
 `[configuration](/browserthing/docs/configuration/#worker)`. These paths work in
 both HTML and exported Markdown. Add docs pages to the sidebar in `astro.config.mjs`.
 
+The product message is **Use Playwright in your app. Run browsers elsewhere.**
+Keep the README, landing page, site metadata, and docs overview focused on
+developers who use Playwright from application code. Explain how a shared browser
+service handles browser management and lets browser capacity grow separately
+from application capacity. Keep specific tasks, such as screenshots, as examples
+in the guides. State that the team still deploys and updates the service, and that
+sessions share a browser process on each worker.
+
 ## Markdown access
 
 `starlight-page-actions` provides page copy controls and static `.md` files.

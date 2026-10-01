@@ -1,5 +1,9 @@
 # Control plane server
 
+The BrowserThing server connects your application's Playwright code to an
+available browser worker. Applications use one endpoint to send browser commands
+and receive results while workers run the browsers.
+
 The server uses these environment variables:
 
 - `DATABASE_URL` is required. It is the PostgreSQL connection string.

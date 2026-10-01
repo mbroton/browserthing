@@ -3,9 +3,10 @@ title: Security
 description: Understand BrowserThing authentication, browser isolation, and network boundaries.
 ---
 
-BrowserThing trusts authenticated clients. In bootstrap mode, it trusts every
-client that can reach the server. Browsers can visit untrusted pages, but the
-grid is not a security boundary between hostile clients.
+BrowserThing is built for applications you trust. It trusts authenticated clients.
+In bootstrap mode, it trusts every client that can reach the server. Browsers can
+visit untrusted pages, but the service is not a security boundary between hostile
+clients.
 
 ## Session isolation
 
@@ -23,6 +24,9 @@ sessions end together.
 Use dedicated VMs when you need a stronger boundary against hostile tenants or
 browser exploits. An authenticated client can use browser network access, so
 control which internal addresses workers can reach.
+
+Browser tasks can load a URL supplied by a user. Apply network access controls
+to the workers for these requests, including access to internal services.
 
 ## Authentication
 
