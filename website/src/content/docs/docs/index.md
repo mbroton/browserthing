@@ -1,19 +1,28 @@
 ---
 title: Overview
-description: Use browsers from your application code while BrowserThing runs and manages them on separate workers.
+description: A self-hosted browser pool for Playwright applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.
 ---
 
 **Use Playwright in your app. Run browsers elsewhere.**
 
-BrowserThing is a self-hosted browser service for Playwright. Use browsers from
-your application code while BrowserThing runs and manages them on separate workers.
-Your application controls the browser actions and uses the results through Playwright.
-BrowserThing keeps browsers running between tasks and handles session cleanup
-and browser recycling.
+BrowserThing is a self-hosted browser pool for applications using Playwright.
+It was built for workloads with many short browser tasks. Starting a new browser
+for every task adds time and CPU use. Keeping the same browser running indefinitely
+can let memory use grow or leave it in a bad state. BrowserThing reuses running
+browsers and replaces them after a configurable number of sessions.
+
+Your application runs normal Playwright code and connects through one WebSocket
+endpoint. BrowserThing selects an available worker and cleans up each session
+when its connection closes. Browser capacity can grow without changes to the
+endpoint your applications use.
 
 You deploy and update the server, PostgreSQL, and browser workers. Run workers
 on separate machines to keep browser CPU and memory use off your application
 servers. Add workers when you need more browser capacity.
+
+The pool is built for your own applications and trusted clients. Browser contexts
+separate cookies and storage, but sessions share a browser process on each worker.
+See the [security boundary](/browserthing/docs/security/).
 
 These guides describe **BrowserThing v0.6.0**, with **Playwright 1.63.0** workers.
 
