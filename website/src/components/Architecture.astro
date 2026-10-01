@@ -1,0 +1,194 @@
+---
+const code = [
+  ["import { chromium } from 'playwright';", 'import'],
+  ['', ''],
+  ['const browser = await chromium.connect(', 'connect'],
+  ["  'ws://localhost:8080'", 'connect'],
+  [');', 'connect'],
+  ['const page = await browser.newPage();', 'run'],
+  ["await page.goto('https://example.com');", 'run'],
+  ['console.log(await page.title());', 'run'],
+  ['await browser.close();', ''],
+];
+const workers = [
+  { browser: 'Chromium', capacity: '5/5 · full', selected: false },
+  { browser: 'Chromium', capacity: '3/5 · selected', selected: true },
+  { browser: 'Firefox', capacity: '1/5 sessions', selected: false },
+];
+---
+
+<section class="architecture" id="how-it-works" data-step="0" aria-labelledby="architecture-title" aria-describedby="architecture-description">
+  <h2 id="architecture-title">How it works</h2>
+  <p id="architecture-description" class="visually-hidden">Your regular Playwright code connects to BrowserThing. The service selects a matching worker with a free session slot, skips full workers, and relays your browser commands and results.</p>
+  <div class="stage">
+    <div class="service-area" aria-hidden="true"></div>
+    <div class="service-label" aria-hidden="true"><strong>BrowserThing</strong><span>Your browser service</span></div>
+
+    <div class="code-window">
+      <div class="code-bar">
+        <span>example.mjs <span class="app-label">/ your app</span></span>
+      </div>
+      <pre class="demo-code" tabindex="0" aria-label="Regular Playwright code"><code>{code.map(([line, kind]) => <span class:list={['code-line', kind]}>{line || ' '}</span>)}</code></pre>
+      <div class="code-result" aria-hidden="true"><span>↳</span> Example Domain</div>
+    </div>
+
+    <div class="client-connection" aria-hidden="true">
+      <svg viewBox="0 0 20 100" preserveAspectRatio="none">
+        <path class="wire" d="M10 0 V100" />
+        <path class="packet connect-packet" d="M10 0 V100" pathLength="1" />
+        <path class="packet result-packet" d="M10 100 V0" pathLength="1" />
+      </svg>
+      <span>WebSocket</span>
+    </div>
+
+    <div class="endpoint" aria-hidden="true">
+      <svg viewBox="0 0 28 24"><path d="M1 1h26v9H1Zm0 13h26v9H1ZM5 5h2m-2 13h2" /></svg>
+      <strong>Connection endpoint</strong>
+      <span>Routes your session</span>
+    </div>
+
+    <div class="worker-connections" aria-hidden="true">
+      <svg viewBox="0 0 300 100" preserveAspectRatio="none">
+        <path class="wire" d="M150 0 V40 H50 V100 M150 40 H250 V100" />
+        <path class="wire selected-wire" d="M150 0 V100" />
+        <path class="packet worker-packet" d="M150 0 V100" pathLength="1" />
+        <path class="packet worker-result" d="M150 100 V0" pathLength="1" />
+      </svg>
+    </div>
+
+    <div class="workers" aria-hidden="true">
+      {workers.map((worker) => (
+        <div class:list={['worker', { selected: worker.selected }]}>
+          <div class="browser-window">
+            <div class="browser-bar"><span>{worker.browser}</span><i /></div>
+            <div class="browser-page">
+              {worker.selected && <div class="page-content"><strong>Example Domain</strong><span /><span /></div>}
+            </div>
+          </div>
+          <span class="capacity">{worker.capacity}</span>
+        </div>
+      ))}
+      <span class="pool-note">Browsers stay running.</span>
+    </div>
+  </div>
+  <noscript><p>Your Playwright code connects to BrowserThing. The service selects a matching worker with a free session slot and relays your browser commands.</p></noscript>
+</section>
+
+<script>
+  const root = document.querySelector<HTMLElement>('#how-it-works');
+  if (root) {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let step = 0;
+    let visible = false;
+    let timer: number | undefined;
+
+    function update() {
+      window.clearTimeout(timer);
+      root!.dataset.step = String(step);
+      if (step && visible && !document.hidden && !reducedMotion.matches) {
+        timer = window.setTimeout(() => {
+          step = step % 3 + 1;
+          update();
+        }, 5000);
+      }
+    }
+
+    window.setTimeout(() => {
+      step = reducedMotion.matches ? 3 : 1;
+      update();
+    }, 1000);
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      update();
+    }, { threshold: 0.1 }).observe(root.querySelector('.stage')!);
+    document.addEventListener('visibilitychange', update);
+    reducedMotion.addEventListener('change', () => {
+      if (step && reducedMotion.matches) step = 3;
+      update();
+    });
+  }
+</script>
+
+<style>
+  .architecture { --ink: #e4d6bd; margin: 48px 0; }
+  h2 { margin: 0 0 24px; color: #eeeeee; font: 500 17px/1.4 var(--mono); letter-spacing: -.03em; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  .stage { --offset: 48px; position: relative; width: min(100%, 448px); height: 576px; margin-inline: auto; }
+  [data-step='0'] .stage { height: 314px; }
+  .code-window { position: absolute; z-index: 2; top: 64px; left: 0; width: 100%; height: 234px; border: 1px solid #45433e; background: #171717; transition: top .8s cubic-bezier(.22, 1, .36, 1); }
+  .code-bar { display: flex; justify-content: space-between; align-items: center; height: 36px; padding: 0 12px; border-bottom: 1px solid #303030; color: #bcbcbc; font: 11px var(--mono); }
+  .app-label { color: #808080; }
+  .demo-code { margin: 0; padding: 12px; overflow-x: auto; background: transparent !important; font: 11px/19px var(--mono); }
+  .code-line { display: block; min-height: 19px; color: #b4b4b4; }
+  .code-line.import { color: #a5b4c4; }
+  .code-result { position: absolute; top: calc(100% + 8px); left: 0; color: var(--ink); font: 10px var(--mono); opacity: 0; }
+  .code-result > span { margin-right: 8px; color: #777777; }
+
+  .service-area { position: absolute; top: calc(280px + var(--offset)); left: 0; width: 100%; height: 150px; border-left: 1px solid #655d4e; background: #ffffff03; }
+  .service-area::before, .service-area::after { position: absolute; left: -1px; width: 12px; height: 1px; background: #655d4e; content: ''; }
+  .service-area::before { top: 0; }
+  .service-area::after { bottom: 0; }
+  .service-label { position: absolute; top: calc(292px + var(--offset)); left: 12px; display: flex; flex-direction: column; gap: 5px; }
+  .service-label strong { color: #c7bba6; font: 500 12px var(--mono); }
+  .service-label > span { color: #92908b; font-size: 10px; }
+  .endpoint { position: absolute; top: calc(322px + var(--offset)); left: 20%; display: flex; flex-direction: column; align-items: center; gap: 7px; width: 60%; }
+  .endpoint > svg { width: 28px; height: 24px; margin-bottom: 3px; fill: none; stroke: #aca393; stroke-width: 1; }
+  .endpoint strong { color: #ded9cf; font: 500 11px/1.4 var(--mono); }
+  .endpoint > span { color: #92908b; font-size: 11px; }
+  .client-connection { position: absolute; top: calc(234px + var(--offset)); left: calc(50% - 10px); width: 20px; height: 88px; }
+  .client-connection > span { position: absolute; top: 24px; left: 24px; color: #92908b; font: 10px var(--mono); }
+  .client-connection svg, .worker-connections svg { display: block; width: 100%; height: 100%; overflow: visible; }
+  .wire { fill: none; stroke: #46443f; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .packet { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-dasharray: .01 1; stroke-dashoffset: 1; opacity: 0; }
+  .worker-connections { position: absolute; top: calc(398px + var(--offset)); left: 0; width: 100%; height: 60px; }
+  .selected-wire { stroke: #b7a990; }
+  .workers { position: absolute; top: calc(458px + var(--offset)); left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .worker { width: 82%; height: 76px; justify-self: center; }
+  .browser-window { height: 56px; border: 1px solid #414141; }
+  .browser-bar { display: flex; justify-content: space-between; align-items: center; height: 16px; padding: 0 6px; border-bottom: 1px solid #414141; color: #aaaaaa; font: 9px var(--mono); }
+  .browser-bar i { width: 3px; height: 3px; background: #777777; border-radius: 50%; }
+  .selected .browser-window, .selected .browser-bar { border-color: #a89c87; }
+  .selected .browser-bar { color: var(--ink); }
+  .page-content { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; opacity: 0; }
+  .page-content strong { color: var(--ink); font: 8px/1.3 var(--mono); }
+  .page-content > span { width: 80%; height: 2px; background: #8f8778; }
+  .page-content > span:last-child { width: 60%; }
+  .capacity { display: block; margin-top: 5px; color: #92908b; font: 9px var(--mono); text-align: center; }
+  .selected .capacity { color: #c7bba6; }
+  .pool-note { position: absolute; top: calc(100% + 9px); right: 12px; color: #92908b; font: 9px var(--mono); }
+
+  .service-area, .service-label, .endpoint, .client-connection, .worker-connections, .workers { opacity: 0; visibility: hidden; transition: opacity .6s, visibility .6s, top .8s cubic-bezier(.22, 1, .36, 1), height .8s cubic-bezier(.22, 1, .36, 1); }
+  .architecture:not([data-step='0']) .code-window { top: var(--offset); }
+  .architecture:not([data-step='0']) :is(.service-area, .service-label, .endpoint, .client-connection) { opacity: 1; visibility: visible; }
+  .architecture:is([data-step='2'], [data-step='3']) .stage { --offset: 0px; }
+  .architecture:is([data-step='2'], [data-step='3']) .service-area { height: 280px; }
+  .architecture:is([data-step='2'], [data-step='3']) :is(.worker-connections, .workers) { opacity: 1; visibility: visible; transition-delay: .3s; }
+  .architecture:is([data-step='1'], [data-step='2']) .code-line.connect,
+  [data-step='3'] .code-line.run { color: var(--ink); }
+  [data-step='3'] :is(.page-content, .code-result) { opacity: 1; }
+
+  @keyframes travel {
+    0% { stroke-dashoffset: 1; opacity: 0; }
+    10%, 90% { opacity: 1; }
+    100% { stroke-dashoffset: 0; opacity: 0; }
+  }
+  @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+
+  @media (max-width: 600px) {
+    .demo-code { font-size: 10px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-step='1'] .connect-packet { animation: travel .8s .8s ease-in-out both; }
+    [data-step='2'] .worker-packet { animation: travel .8s .8s ease-in-out both; }
+    [data-step='3'] .connect-packet { animation: travel .5s ease-in-out both; }
+    [data-step='3'] .worker-packet { animation: travel .5s .5s ease-in-out both; }
+    [data-step='3'] .page-content { animation: appear .4s 1s ease-out both; }
+    [data-step='3'] .worker-result { animation: travel .5s 1.5s ease-in-out both; }
+    [data-step='3'] .result-packet { animation: travel .5s 2s ease-in-out both; }
+    [data-step='3'] .code-result { animation: appear .3s 2.5s ease-out both; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .architecture *, .architecture ::before, .architecture ::after { transition: none !important; }
+  }
+</style>
