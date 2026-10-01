@@ -48,12 +48,22 @@ docs use paths starting with `/browserthing/`, such as
 both HTML and exported Markdown. Add docs pages to the sidebar in `astro.config.mjs`.
 
 The product message is **Use Playwright in your app. Run browsers elsewhere.**
-Keep the README, landing page, site metadata, and docs overview focused on
-developers who use Playwright from application code. Explain how a shared browser
-service handles browser management and lets browser capacity grow separately
-from application capacity. Keep specific tasks, such as screenshots, as examples
-in the guides. State that the team still deploys and updates the service, and that
-sessions share a browser process on each worker.
+Lead with why the pool exists: applications with many short browser tasks pay
+repeated startup costs, while browsers kept alive indefinitely can use more
+memory or become unstable. BrowserThing reuses running browsers, cleans up
+sessions, and replaces browsers after a configurable number of sessions.
+
+Keep the README, landing page, site metadata, and docs overview aligned with this
+purpose. Developers keep normal Playwright code in their applications and connect
+through one WebSocket endpoint. Separate workers let browser capacity grow
+independently of application capacity. Keep specific tasks, such as screenshots,
+as examples in the guides.
+
+State the trade-off with the benefit: the pool serves your own applications and
+trusted clients. Browser contexts separate cookies and storage, but sessions
+share a browser process on each worker. The team still deploys and updates the
+service. Keep performance claims limited to the measured workload; the short-task
+benchmark does not establish a general speed advantage over Browserless.
 
 ## Markdown access
 

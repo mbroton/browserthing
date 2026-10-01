@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Use Playwright in your app. Run browsers elsewhere.</strong><br/>
-  A self-hosted browser service for <a href="https://playwright.dev/">Playwright</a>. Use browsers from your application code while BrowserThing runs and manages them on separate workers.
+  A self-hosted browser pool for <a href="https://playwright.dev/">Playwright</a> applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.
 </p>
 
 <p align="center">
@@ -15,10 +15,15 @@
 [Website](https://mbroton.github.io/browserthing/) ·
 [Documentation](https://mbroton.github.io/browserthing/docs/)
 
-Write browser tasks in your application code and connect to BrowserThing through
-one endpoint. BrowserThing keeps browsers running between tasks and handles
-session cleanup and browser recycling. Your team deploys and updates the service;
-each application uses it through Playwright.
+BrowserThing was built for applications that run many short browser tasks.
+Starting a new browser for every task adds time and CPU use. Keeping the same
+browser running indefinitely can let memory use grow or leave it in a bad state.
+BrowserThing reuses running browsers across tasks and replaces them after a
+configurable number of sessions.
+
+Write normal Playwright code in your application and connect through one
+WebSocket endpoint. BrowserThing selects an available worker and cleans up each
+session when its connection closes. Your team deploys and updates the service.
 
 Run workers on separate machines to keep browser CPU and memory use off your
 application servers. Add workers when you need more browser capacity.
@@ -28,6 +33,10 @@ Your application                 BrowserThing
 Playwright commands ---------->  Browser workers
 Results             <----------  Browsers stay running
 ```
+
+The pool is built for your own applications and trusted clients. Browser contexts
+separate cookies and storage, but sessions share a browser process on each worker.
+See the [security boundary](#security-boundary).
 
 BrowserThing was previously named `playwright-distributed`.
 For existing installations, see [upgrading after the rename](#upgrading-after-the-rename).

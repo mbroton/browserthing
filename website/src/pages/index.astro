@@ -5,7 +5,7 @@ import '../styles/landing.css';
 const base = import.meta.env.BASE_URL;
 const repo = 'https://github.com/mbroton/browserthing';
 const headline = 'Use Playwright in your app. Run browsers elsewhere.';
-const description = 'A self-hosted browser service for Playwright. Use browsers from your application code while BrowserThing runs and manages them on separate workers.';
+const description = 'A self-hosted browser pool for Playwright applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.';
 ---
 <!doctype html>
 <html lang="en">
@@ -40,10 +40,18 @@ const description = 'A self-hosted browser service for Playwright. Use browsers 
       </p>
 
       <p>
-        Connect through one endpoint and control the browser with Playwright.
-        BrowserThing keeps browsers running between tasks and handles session
-        cleanup and browser recycling. Several applications can share the same
-        internal service.
+        BrowserThing was built for applications that run many short browser tasks.
+        Starting a new browser each time adds time and CPU use. Keeping the same
+        browser running indefinitely can let memory use grow or leave it in a bad
+        state. BrowserThing reuses running browsers and replaces them after a
+        configurable number of sessions.
+      </p>
+
+      <p>
+        Write normal Playwright code and connect through one WebSocket endpoint.
+        BrowserThing selects an available worker and cleans up each session when
+        its connection closes. Several applications can share the same internal
+        service.
       </p>
 
       <p>
@@ -55,8 +63,9 @@ const description = 'A self-hosted browser service for Playwright. Use browsers 
       <Architecture />
 
       <p class="note">
-        You deploy and update the service. Sessions use separate browser contexts
-        and share a browser process on each worker. See the <a href={`${base}docs/security/`}>security boundary</a>.
+        You deploy and update the service for your own applications and trusted
+        clients. Browser contexts separate cookies and storage, but sessions
+        share a browser process on each worker. See the <a href={`${base}docs/security/`}>security boundary</a>.
         Connect your application with the <a href={`${base}docs/quick-start/`}>quick start</a>.
       </p>
 
