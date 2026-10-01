@@ -271,13 +271,6 @@ curl -s localhost:8080/v1/sessions/<id>          # inspect it
 curl -X DELETE localhost:8080/v1/sessions/<id>   # terminate it, even mid-use
 ```
 
-## Roadmap
-
-- Persistent sessions: keep a browser session alive between connections and
-  reattach to it by ID.
-- Kubernetes deployment guide.
-- Prometheus metrics and a dashboard over the existing REST API.
-
 ## Contributing
 
 Bugs and ideas are welcome — open an issue. Code changes should start as an
