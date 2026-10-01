@@ -34,6 +34,8 @@ For existing installations, see [upgrading after the rename](#upgrading-after-th
 
 ## Quick start
 
+You need Docker with the Compose plugin, `curl`, and Node.js 20 or later.
+
 **1. Start the service** — the server, PostgreSQL, and one Chromium worker:
 
 ```bash
@@ -42,7 +44,14 @@ curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.
 docker compose up -d
 ```
 
-**2. Run a browser task** with a matching Playwright client. This example saves
+**2. Install the Playwright client.** The current release uses Playwright `1.63.0`:
+
+```bash
+npm init -y
+npm install playwright@1.63.0
+```
+
+**3. Run a browser task.** Save this as `browser-task.mjs`. This example saves
 a screenshot. Replace the task with the browser actions your application needs:
 
 ```js
@@ -57,6 +66,12 @@ try {
 } finally {
   await browser.close();
 }
+```
+
+Run the example:
+
+```bash
+node browser-task.mjs
 ```
 
 The client saves `preview.png` locally. BrowserThing releases the session's
