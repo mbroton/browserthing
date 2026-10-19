@@ -25,7 +25,7 @@ Check the endpoint and browser type. `chromium.connect()` needs a Chromium
 worker. Firefox and WebKit need their own workers and `?browser=` selection.
 
 Check the client's Playwright version against the worker. The major and minor
-versions must match. BrowserThing v0.6.0 images use Playwright 1.63.0.
+versions must match. BrowserThing v0.6.1 images use Playwright 1.63.0.
 
 ## HTTP errors
 

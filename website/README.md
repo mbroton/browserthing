@@ -79,7 +79,7 @@ Page copy needs HTTPS or localhost because it uses the browser Clipboard API.
 
 ## Release updates
 
-The initial docs describe BrowserThing v0.6.0 and Playwright 1.63.0. When the
+The docs describe BrowserThing v0.6.1 and Playwright 1.63.0. When the
 documented release changes, update the release links, client install versions,
 and version labels together. Refresh `public/downloads/docker-compose.yaml`
 from that release's root Compose file, with both BrowserThing image tags pinned

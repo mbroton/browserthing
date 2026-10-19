@@ -9,7 +9,7 @@ Playwright. The examples use a local server. Add
 enable authentication.
 
 The full request and response schemas are in the
-[v0.6.0 OpenAPI document](https://github.com/mbroton/browserthing/blob/v0.6.0/server/openapi.yaml).
+[v0.6.1 OpenAPI document](https://github.com/mbroton/browserthing/blob/v0.6.1/server/openapi.yaml).
 WebSocket routes are documented separately below.
 
 ## Capacity and workers
@@ -195,6 +195,6 @@ docker compose exec server server apikey list
 docker compose exec server server apikey revoke --id KEY_ID
 ```
 
-All valid keys have full access in v0.6.0. Worker registration and lifecycle
+All valid keys have full access in v0.6.1. Worker registration and lifecycle
 routes under `/internal/workers` are for the worker protocol; their schemas are
 also included in OpenAPI.

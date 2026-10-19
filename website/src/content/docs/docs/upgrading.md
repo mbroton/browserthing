@@ -8,10 +8,10 @@ sessions to end when the containers restart.
 
 ## Choose a release
 
-| Component | Image for v0.6.0 |
+| Component | Image for v0.6.1 |
 | --- | --- |
-| Server | `ghcr.io/mbroton/browserthing/server:0.6.0` |
-| Worker | `ghcr.io/mbroton/browserthing/worker:0.6.0` |
+| Server | `ghcr.io/mbroton/browserthing/server:0.6.1` |
+| Worker | `ghcr.io/mbroton/browserthing/worker:0.6.1` |
 
 Read the [release notes](https://github.com/mbroton/browserthing/releases) before
 you change the image tags. Pin both images to the same BrowserThing release.
@@ -52,5 +52,5 @@ logs, then run a client connection using a compatible Playwright version.
 ## Check client compatibility
 
 The client and worker need matching Playwright major and minor versions.
-The v0.6.0 worker uses **1.63.0**. Update client dependencies when a new worker
+The v0.6.1 worker uses **1.63.0**. Update client dependencies when a new worker
 image changes that version.
