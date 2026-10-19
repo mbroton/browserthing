@@ -25,7 +25,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -60,14 +60,14 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: worker/package-lock.json
 
@@ -78,7 +78,7 @@ jobs:
       # Both images are built for both platforms before anything is pushed, so
       # a build failure cannot leave one image published without the other.
       - name: Build server for all release platforms
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./server
           file: ./server/Dockerfile
@@ -88,7 +88,7 @@ jobs:
           cache-from: type=gha,scope=server
 
       - name: Build worker for all release platforms
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./worker
           file: ./worker/Dockerfile
@@ -102,7 +102,7 @@ jobs:
       # names and runs that file unchanged. In a fork, update the compose
       # image owner to match IMAGE_PREFIX before releasing.
       - name: Load the amd64 images under their deployment tags
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./server
           file: ./server/Dockerfile
@@ -112,7 +112,7 @@ jobs:
           tags: ${{ env.IMAGE_PREFIX }}/server:latest
 
       - name: Load the amd64 worker image under its deployment tag
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./worker
           file: ./worker/Dockerfile
@@ -170,12 +170,12 @@ jobs:
     needs: [checks, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -183,7 +183,7 @@ jobs:
 
       - name: Docker meta (server)
         id: meta-server
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_PREFIX }}/server
           # `latest=auto` keeps a pre-release tag from moving `latest`.
@@ -195,7 +195,7 @@ jobs:
 
       - name: Docker meta (worker)
         id: meta-worker
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE_PREFIX }}/worker
           flavor: latest=auto
@@ -207,7 +207,7 @@ jobs:
       # Both builds are cache hits from the build job, so these steps only push
       # the layers. The two images therefore reach the registry seconds apart.
       - name: Push server
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./server
           file: ./server/Dockerfile
@@ -218,7 +218,7 @@ jobs:
           labels: ${{ steps.meta-server.outputs.labels }}
 
       - name: Push worker
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./worker
           file: ./worker/Dockerfile
@@ -249,7 +249,7 @@ jobs:
           done
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}

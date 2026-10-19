@@ -37,3 +37,16 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    assignees: ["mbroton"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
