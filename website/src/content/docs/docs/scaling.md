@@ -32,14 +32,14 @@ Configure [authentication and private networking](/browserthing/docs/deployment/
 server must be able to reach each worker at its advertised hostname and port.
 
 On a worker host, download the
-[Chromium seccomp profile](https://raw.githubusercontent.com/mbroton/browserthing/v0.6.0/worker/seccomp_profile.json)
+[Chromium seccomp profile](https://raw.githubusercontent.com/mbroton/browserthing/v0.6.1/worker/seccomp_profile.json)
 to `worker/seccomp_profile.json`. Put `WORKER_API_KEY` in `.env`. Then use a
 worker-only Compose file like this:
 
 ```yaml
 services:
   worker:
-    image: ghcr.io/mbroton/browserthing/worker:0.6.0
+    image: ghcr.io/mbroton/browserthing/worker:0.6.1
     init: true
     security_opt:
       - seccomp=./worker/seccomp_profile.json
@@ -74,7 +74,7 @@ spend more time waiting for pages can use more slots, provided memory permits.
 
 Increase capacity in steps. Measure latency, throughput, and memory with your
 own workload. Adding more workers on a fully used host does not add CPU capacity.
-The repository includes [benchmark scripts](https://github.com/mbroton/browserthing/tree/v0.6.0/scripts/bench).
+The repository includes [benchmark scripts](https://github.com/mbroton/browserthing/tree/v0.6.1/scripts/bench).
 See [benchmark results](/browserthing/docs/benchmarks/) for a comparison of
 BrowserThing and Browserless on the same hardware.
 

@@ -24,7 +24,7 @@ The pool is built for your own applications and trusted clients. Browser context
 separate cookies and storage, but sessions share a browser process on each worker.
 See the [security boundary](/browserthing/docs/security/).
 
-These guides describe **BrowserThing v0.6.0**, with **Playwright 1.63.0** workers.
+These guides describe **BrowserThing v0.6.1**, with **Playwright 1.63.0** workers.
 
 ```text
 Your application: Playwright code
