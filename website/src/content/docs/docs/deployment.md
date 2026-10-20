@@ -59,7 +59,7 @@ Give clients a key before they connect. Workers also need keys for registration
 and heartbeats. Do not commit `.env` or keys to Git.
 
 :::caution[Equal access]
-Every valid API key has full browser and control-plane access in v0.6.1. Keys do
+Every valid API key has full browser and control-plane access in v0.7.0. Keys do
 not separate tenants or restrict access to individual sessions.
 :::
 

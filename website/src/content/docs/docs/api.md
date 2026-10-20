@@ -9,7 +9,7 @@ Playwright. The examples use a local server. Add
 enable authentication.
 
 The full request and response schemas are in the
-[v0.6.1 OpenAPI document](https://github.com/mbroton/browserthing/blob/v0.6.1/server/openapi.yaml).
+[v0.7.0 OpenAPI document](https://github.com/mbroton/browserthing/blob/v0.7.0/server/openapi.yaml).
 WebSocket routes are documented separately below.
 
 ## Capacity and workers
@@ -62,7 +62,7 @@ Playwright version so the server can select a matching worker:
 ```sh
 curl -fsS http://localhost:8080/v1/sessions \
   -H 'Content-Type: application/json' \
-  -d '{"browser":"chromium","playwright_version":"1.63.0"}'
+  -d '{"browser":"chromium","playwright_version":"1.64.1"}'
 ```
 
 Success returns `201 Created` and a session object. These are selected fields
@@ -72,7 +72,7 @@ from an example response; IDs differ for each session:
 {
   "id": "6fb174a2-4dc3-4c29-a33c-20f3b05da4bd",
   "browser": "chromium",
-  "playwright_version": "1.63.0",
+  "playwright_version": "1.64.1",
   "mode": "default",
   "status": "pending",
   "started_at": null,
@@ -85,7 +85,7 @@ example creates the session and uses its returned ID immediately. It needs
 Node.js 20 or later and the matching client:
 
 ```sh
-npm install playwright@1.63.0
+npm install playwright@1.64.1
 ```
 
 Save this as `create-session.mjs`. Set `BROWSERTHING_URL` for a remote server and
@@ -102,7 +102,7 @@ const headers = key ? { Authorization: `Bearer ${key}` } : {};
 const response = await fetch(new URL('/v1/sessions', server), {
   method: 'POST',
   headers: { ...headers, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ browser: 'chromium', playwright_version: '1.63.0' }),
+  body: JSON.stringify({ browser: 'chromium', playwright_version: '1.64.1' }),
 });
 if (!response.ok) {
   throw new Error(`Create session: HTTP ${response.status}: ${await response.text()}`);
@@ -195,6 +195,6 @@ docker compose exec server server apikey list
 docker compose exec server server apikey revoke --id KEY_ID
 ```
 
-All valid keys have full access in v0.6.1. Worker registration and lifecycle
+All valid keys have full access in v0.7.0. Worker registration and lifecycle
 routes under `/internal/workers` are for the worker protocol; their schemas are
 also included in OpenAPI.
