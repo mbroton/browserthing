@@ -53,11 +53,11 @@ curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.
 docker compose up -d
 ```
 
-**2. Install the Playwright client.** The current release uses Playwright `1.63.0`:
+**2. Install the Playwright client.** The current release uses Playwright `1.64.1`:
 
 ```bash
 npm init -y
-npm install playwright@1.63.0
+npm install playwright@1.64.1
 ```
 
 **3. Run a browser task.** Save this as `browser-task.mjs`. This example saves
@@ -288,7 +288,7 @@ curl -s localhost:8080/v1/workers                # the whole grid
 # Create a session, then connect to it by ID:
 curl -s -X POST localhost:8080/v1/sessions \
   -H 'Content-Type: application/json' \
-  -d '{"browser": "chromium", "playwright_version": "1.63.0"}'
+  -d '{"browser": "chromium", "playwright_version": "1.64.1"}'
 # -> { "id": "..." }  connect: chromium.connect('ws://localhost:8080/sessions/<id>')
 
 curl -s localhost:8080/v1/sessions/<id>          # inspect it
