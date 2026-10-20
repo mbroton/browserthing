@@ -163,7 +163,9 @@ test('heartbeat is single-flight, reports sessions, and closes stale sessions', 
     t.after(() => server.close());
 
     const gateway = new FakeGateway([activeId]);
-    const worker = createWorker(server.url, gateway);
+    // Only the first response marks the session stale. The default 10 ms
+    // request timeout can drop that response on a slow CI runner.
+    const worker = createWorker(server.url, gateway, 1_000);
     await worker.start();
     await waitFor(() => gateway.closedSessions.length === 1);
     await delay(80);
@@ -1170,10 +1172,14 @@ class FakeControlPlane implements ControlPlaneLike {
     }
 }
 
-function createWorker(serverUrl: string, gateway: FakeGateway): BrowserWorker {
+function createWorker(serverUrl: string, gateway: FakeGateway, heartbeatTimeoutMs?: number): BrowserWorker {
     const config = testConfig(1_000);
     return new BrowserWorker(config, {
-        controlPlane: new ControlPlaneClient(serverUrl, undefined, config.lifecycle.heartbeatIntervalMs),
+        controlPlane: new ControlPlaneClient(
+            serverUrl,
+            undefined,
+            heartbeatTimeoutMs ?? config.lifecycle.heartbeatIntervalMs,
+        ),
         createGateway: () => gateway,
         launchBrowser: async () => new FakeBrowser(),
         exit: () => undefined,
