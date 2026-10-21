@@ -1,10 +1,10 @@
 ---
 title: Configuration
-description: Server and worker environment variables for BrowserThing v0.6.1.
+description: Server and worker environment variables for BrowserThing v0.7.0.
 ---
 
 Configure the server and workers with environment variables. These are the
-application defaults for v0.6.1. A Compose file can override them.
+application defaults for v0.7.0. A Compose file can override them.
 
 ## Server
 

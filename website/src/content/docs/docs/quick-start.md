@@ -21,10 +21,10 @@ upgrade, because Docker Compose uses it to name the database volume.
 mkdir browserthing
 cd browserthing
 curl -fsSLO https://mbroton.github.io/browserthing/downloads/docker-compose.yaml
-curl -fsSL --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.com/mbroton/browserthing/v0.6.1/worker/seccomp_profile.json
+curl -fsSL --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.com/mbroton/browserthing/v0.7.0/worker/seccomp_profile.json
 ```
 
-This site's Compose file pins both BrowserThing images to `0.6.1`. It starts
+This site's Compose file pins both BrowserThing images to `0.7.0`. It starts
 PostgreSQL, the server, and one Chromium worker with five session slots.
 
 ## 2. Start the service
@@ -51,7 +51,7 @@ Install the matching Playwright client:
 
 ```sh
 npm init -y
-npm install playwright@1.63.0
+npm install playwright@1.64.1
 ```
 
 Save this as `preview.mjs`. This example saves a screenshot. Replace the task
@@ -82,7 +82,7 @@ on the worker, and Playwright saves the screenshot on the client machine.
 Closing the connection releases the session's resources for the next task.
 
 The client and worker must have the same Playwright **major and minor** version.
-For these images, use `1.63.x`.
+For these images, use `1.64.x`.
 
 ## 4. Add capacity or stop
 

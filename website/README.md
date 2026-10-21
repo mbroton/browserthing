@@ -79,11 +79,13 @@ Page copy needs HTTPS or localhost because it uses the browser Clipboard API.
 
 ## Release updates
 
-The docs describe BrowserThing v0.6.1 and Playwright 1.63.0. When the
+The docs describe BrowserThing v0.7.0 and Playwright 1.64.1. When the
 documented release changes, update the release links, client install versions,
-and version labels together. Refresh `public/downloads/docker-compose.yaml`
-from that release's root Compose file, with both BrowserThing image tags pinned
-to the release number. Keep the seccomp profile URL on the same release tag.
+and version labels together. Check that each client install version exists on
+npm and PyPI; the Python package does not publish every patch release. Refresh
+`public/downloads/docker-compose.yaml` from that release's root Compose file,
+with both BrowserThing image tags pinned to the release number. Keep the seccomp
+profile URL on the same release tag.
 
 The README, server README, worker README, and OpenAPI document in the repository
 are the sources for the first set of guides. Check behavior against the release
