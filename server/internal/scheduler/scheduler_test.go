@@ -474,8 +474,68 @@ func TestScheduler_Queue(t *testing.T) {
 		if _, err := scheduler.Claim(t.Context(), ClaimRequest{Browser: "chromium"}); err != nil {
 			t.Fatalf("Claim() returned an error: %v", err)
 		}
-		if _, err := scheduler.Admit(t.Context(), ClaimRequest{Browser: "chromium"}); !errors.Is(err, ErrWaitTimeout) {
+		_, err := scheduler.Admit(t.Context(), ClaimRequest{Browser: "chromium"})
+		if !errors.Is(err, ErrWaitTimeout) {
 			t.Fatalf("Admit() error = %v, want %v", err, ErrWaitTimeout)
+		}
+		var noMatch *NoMatchingWorkerError
+		if errors.As(err, &noMatch) {
+			t.Fatalf("Admit() error = %v, want a plain wait timeout for a busy matching worker", err)
+		}
+	})
+
+	t.Run("timeout explains a missing matching worker", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			workers []workerSpec
+			request ClaimRequest
+			want    string
+		}{
+			{
+				name:    "other Playwright version",
+				workers: []workerSpec{{playwrightVersion: "1.62.1"}},
+				request: ClaimRequest{Browser: "chromium", VersionPrefix: "1.63."},
+				want: "session queue wait timed out: no worker serves chromium with Playwright 1.63; " +
+					"registered workers: chromium 1.62.1",
+			},
+			{
+				name: "other browsers",
+				workers: []workerSpec{
+					{browser: "webkit", playwrightVersion: "1.62.1"},
+					{browser: "chromium", playwrightVersion: "1.62.1"},
+					{browser: "chromium", playwrightVersion: "1.62.1"},
+				},
+				request: ClaimRequest{Browser: "firefox"},
+				want: "session queue wait timed out: no worker serves firefox; " +
+					"registered workers: chromium 1.62.1, webkit 1.62.1",
+			},
+			{
+				name:    "no workers",
+				request: ClaimRequest{Browser: "chromium", VersionPrefix: "1.62."},
+				want: "session queue wait timed out: no worker serves chromium with Playwright 1.62; " +
+					"no workers are registered",
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				truncate(t, pool)
+				for _, spec := range test.workers {
+					insertWorker(t, pool, queries, spec)
+				}
+				scheduler := newTestScheduler(pool, 1, 50)
+				scheduler.queueWaitTimeout = 25 * time.Millisecond
+				_, err := scheduler.Admit(t.Context(), test.request)
+				if !errors.Is(err, ErrWaitTimeout) {
+					t.Fatalf("Admit() error = %v, want %v", err, ErrWaitTimeout)
+				}
+				var noMatch *NoMatchingWorkerError
+				if !errors.As(err, &noMatch) {
+					t.Fatalf("Admit() error = %v, want *NoMatchingWorkerError", err)
+				}
+				if err.Error() != test.want {
+					t.Fatalf("Admit() error = %q, want %q", err.Error(), test.want)
+				}
+			})
 		}
 	})
 

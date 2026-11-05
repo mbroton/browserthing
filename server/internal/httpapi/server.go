@@ -194,7 +194,7 @@ func registerPublicRoutes(
 			return nil, huma.Error429TooManyRequests("session capacity and queue are full")
 		case errors.Is(err, scheduler.ErrWaitTimeout):
 			return nil, huma.ErrorWithHeaders(
-				huma.Error503ServiceUnavailable("session queue wait timed out"),
+				huma.Error503ServiceUnavailable(queueWaitTimeoutMessage(err)),
 				http.Header{"Retry-After": []string{"1"}},
 			)
 		case errors.Is(err, scheduler.ErrDraining):

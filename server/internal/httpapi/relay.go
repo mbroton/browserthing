@@ -313,7 +313,7 @@ func (h *relayHandler) writeAdmissionError(w http.ResponseWriter, err error) {
 		writeRelayError(w, http.StatusTooManyRequests, "session capacity and queue are full")
 	case errors.Is(err, scheduler.ErrWaitTimeout):
 		w.Header().Set("Retry-After", "1")
-		writeRelayError(w, http.StatusServiceUnavailable, "session queue wait timed out")
+		writeRelayError(w, http.StatusServiceUnavailable, queueWaitTimeoutMessage(err))
 	case errors.Is(err, scheduler.ErrDraining):
 		w.Header().Set("Retry-After", "1")
 		writeRelayError(w, http.StatusServiceUnavailable, "server is shutting down")
@@ -322,6 +322,14 @@ func (h *relayHandler) writeAdmissionError(w http.ResponseWriter, err error) {
 		h.logger.Error("admit relay session", "error", err)
 		writeRelayError(w, http.StatusInternalServerError, "internal server error")
 	}
+}
+
+func queueWaitTimeoutMessage(err error) string {
+	var noMatch *scheduler.NoMatchingWorkerError
+	if errors.As(err, &noMatch) {
+		return noMatch.Error()
+	}
+	return "session queue wait timed out"
 }
 
 func authenticateRelay(

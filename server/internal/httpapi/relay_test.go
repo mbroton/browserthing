@@ -667,6 +667,49 @@ func TestRelay_VersionRoutingAndDialFailure(t *testing.T) {
 		}
 	})
 
+	t.Run("version miss queue timeout names registered workers", func(t *testing.T) {
+		truncateTables(t, pool)
+		worker := newEchoWorker(t)
+		insertRelayWorker(t, queries, worker.wsURL(), "chromium", "1.64.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 10)
+		want := "session queue wait timed out: no worker serves chromium with Playwright 1.63; " +
+			"registered workers: chromium 1.64.1"
+
+		_, response, err := websocket.DefaultDialer.Dial(
+			wsURL(server.URL)+"/",
+			http.Header{"User-Agent": []string{"Playwright/1.63.0 (linux)"}},
+		)
+		if err == nil || response == nil || response.StatusCode != http.StatusServiceUnavailable {
+			t.Fatalf("version miss response = %v, error = %v; want 503", response, err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if readErr != nil {
+			t.Fatalf("reading version miss response: %v", readErr)
+		}
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("version miss response body = %s, want %q", body, want)
+		}
+
+		postResponse := requestJSON(
+			t,
+			server.Config.Handler,
+			http.MethodPost,
+			"/v1/sessions",
+			map[string]any{"browser": "chromium", "playwright_version": "1.63.0"},
+			"",
+		)
+		if postResponse.Code != http.StatusServiceUnavailable ||
+			!strings.Contains(postResponse.Body.String(), want) {
+			t.Fatalf("version-miss POST response = %d %s, want 503 %q", postResponse.Code, postResponse.Body.String(), want)
+		}
+		if got := worker.upgrades.Load(); got != 0 {
+			t.Fatalf("worker upgrades = %d, want 0", got)
+		}
+	})
+
 	t.Run("dial failure retries on a compatible worker", func(t *testing.T) {
 		truncateTables(t, pool)
 		var failedDials atomic.Int32

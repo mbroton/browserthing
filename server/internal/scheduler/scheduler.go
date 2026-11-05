@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -173,7 +175,63 @@ func (s *Scheduler) Reassign(
 	return data.Session{}, ErrNoCapacity
 }
 
+// NoMatchingWorkerError is returned when the queue wait times out and no
+// registered worker serves the requested browser and Playwright version.
+// It wraps ErrWaitTimeout.
+type NoMatchingWorkerError struct {
+	Browser       string
+	VersionPrefix string
+	Registered    []string
+}
+
+func (e *NoMatchingWorkerError) Error() string {
+	requested := e.Browser
+	if e.VersionPrefix != "" {
+		requested += " with Playwright " + strings.TrimSuffix(e.VersionPrefix, ".")
+	}
+	registered := "no workers are registered"
+	if len(e.Registered) > 0 {
+		registered = "registered workers: " + strings.Join(e.Registered, ", ")
+	}
+	return "session queue wait timed out: no worker serves " + requested + "; " + registered
+}
+
+func (e *NoMatchingWorkerError) Unwrap() error {
+	return ErrWaitTimeout
+}
+
+// Admit claims a session, waiting in the admission queue when no slot is free.
 func (s *Scheduler) Admit(ctx context.Context, request ClaimRequest) (data.Session, error) {
+	session, err := s.admit(ctx, request)
+	if errors.Is(err, ErrWaitTimeout) {
+		return data.Session{}, s.explainWaitTimeout(ctx, request)
+	}
+	return session, err
+}
+
+func (s *Scheduler) explainWaitTimeout(ctx context.Context, request ClaimRequest) error {
+	workers, err := s.queries.ListWorkers(ctx)
+	if err != nil {
+		s.logger.Warn("listing workers after queue wait timeout", "error", err)
+		return ErrWaitTimeout
+	}
+	registered := []string{}
+	for _, worker := range workers {
+		if worker.Browser == request.Browser &&
+			strings.HasPrefix(worker.PlaywrightVersion, request.VersionPrefix) {
+			return ErrWaitTimeout
+		}
+		registered = append(registered, worker.Browser+" "+worker.PlaywrightVersion)
+	}
+	slices.Sort(registered)
+	return &NoMatchingWorkerError{
+		Browser:       request.Browser,
+		VersionPrefix: request.VersionPrefix,
+		Registered:    slices.Compact(registered),
+	}
+}
+
+func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Session, error) {
 	if s.isDraining() {
 		return data.Session{}, ErrDraining
 	}
