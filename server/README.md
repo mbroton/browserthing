@@ -49,6 +49,13 @@ The admission queue is in memory and belongs to one server replica. The
 notifications wake queues on all replicas, and a one-second polling fallback
 keeps admission working while a notification listener reconnects.
 
+A request also waits when no registered worker serves its browser and
+Playwright major.minor version, so a worker that is still starting can take
+it. If the wait times out, the `503` message names the requested browser and
+version and lists the registered workers, for example
+`session queue wait timed out: no worker serves chromium with Playwright 1.63;
+registered workers: chromium 1.64.1`.
+
 The `serve` command applies database migrations before it starts the HTTP
 server. API key commands open the database but do not apply migrations.
 
