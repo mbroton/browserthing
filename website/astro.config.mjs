@@ -31,6 +31,7 @@ export default defineConfig({
           { slug: 'docs/quick-start' },
           { slug: 'docs/connect' },
           { slug: 'docs/benchmarks' },
+          { slug: 'docs/own-setup' },
         ] },
         { label: 'Run your browser service', items: [
           { slug: 'docs/architecture' },
