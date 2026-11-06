@@ -1,146 +1,105 @@
 ---
 title: Compare with your own setup
-description: Compare BrowserThing with a browser pool in your application or Playwright browser servers behind a load balancer.
+description: What a shared browser service must handle, and what you build yourself with a browser pool or Playwright browser servers.
 ---
 
-Playwright can run browsers for remote clients without BrowserThing. This page
-compares BrowserThing with two setups that you can build from Playwright alone:
+You can run Playwright browsers without BrowserThing. Teams usually start with
+one of two setups:
 
-1. A browser pool in your application process.
-2. Playwright browser servers in containers behind a load balancer.
+- **A browser pool in your application.** Your application starts a few
+  browsers with `chromium.launch()` and reuses them for its tasks.
+- **Playwright browser servers.** Containers run Playwright's
+  [`launchServer()`](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-server)
+  behind a load balancer. Applications connect with `browserType.connect()`.
 
-Each BrowserThing worker runs one browser with Playwright's
-`browserType.launchServer()`. BrowserThing adds the routing, capacity, and
-recovery around these browsers.
+Playwright also has `npx playwright run-server`. It starts a new browser for
+each connection, so it does not reuse browsers. This page compares with
+`launchServer()`, which does.
 
-## A browser pool in your application
+Both setups work. The difference is the work around the browsers. BrowserThing
+workers also use `launchServer()`. BrowserThing adds the parts that this page
+describes.
 
-Your application launches browsers with `chromium.launch()` and keeps them in a
-pool, for example with a general-purpose pool library. Each task takes a browser,
-creates a context, and returns the browser to the pool.
+## What a browser service must handle
 
-This gives you:
+**Reuse browsers.** A browser takes time and CPU to start. If each task starts
+a new browser, every task pays this cost. See
+[why browser reuse helps](/browserthing/docs/benchmarks/#why-browser-reuse-helps).
 
-- Browser reuse between tasks in the same process.
-- No additional service and no network hop between Playwright and the browser.
-- Launch options that you can set for each browser.
+**Replace browsers from time to time.** A browser that runs for a long time can
+use more memory or stop working correctly. A new browser process starts clean.
+To replace a browser safely, stop new tasks on it, let the current tasks finish,
+and then start a new browser.
 
-You build and run:
+**Limit the sessions on each browser.** Each session uses CPU and memory. Too
+many sessions on one browser make all of them slow or make the browser crash.
 
-- A limit on concurrent tasks and a queue for tasks that wait.
-- Replacement of a browser after a number of tasks. Playwright emits the
-  [`disconnected` event](https://playwright.dev/docs/api/class-browser#browser-event-disconnected)
-  when a browser closes or crashes; your pool must remove that browser.
-- Context cleanup when a task fails.
-- A shutdown that lets tasks finish before the process stops.
-- One pool for each application. Applications in different languages need
-  separate pool code.
+**Let requests wait for capacity.** When all browsers are busy, a request can
+wait a short time for a free session. Without a queue, a request that finds no
+free capacity fails at once.
 
-The browsers use CPU and memory on your application hosts. To add browser
-capacity, you add application capacity.
+**Match Playwright versions.** A Playwright client can connect only to a
+browser server with the same major and minor version, for example 1.64. When
+you update Playwright, applications on the old version and the new version must
+each reach a matching browser.
 
-## Browser servers behind a load balancer
+**Handle failures.** A browser or a host can stop. New tasks must go to healthy
+browsers. If a client disappears, its session must free its place for other
+requests.
 
-Playwright has two server modes. Clients connect to both with
-`browserType.connect()`.
+**Shut down without lost work.** During a deploy, a browser host must finish its
+current tasks before it stops.
 
-| | `browserType.launchServer()` | `npx playwright run-server` |
-| --- | --- | --- |
-| Browser processes | [One browser, shared by all connections](https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/remote/playwrightServer.ts#L257-L274) | [A new browser for each connection](https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/remote/playwrightServer.ts#L285-L309), closed when the connection closes |
-| Browser type | The type that started the server | The type of the client's `connect()` call |
-| Connection limit | [None](https://github.com/microsoft/playwright/blob/v1.64.1/packages/playwright-core/src/browserServerImpl.ts#L84) | `--max-clients`; other connections wait |
-| On disconnect | Closes the contexts of that connection | Closes the browser |
-| Client options | Ignores `exposeNetwork` and launch options from the client | Uses [`exposeNetwork`](https://playwright.dev/docs/api/class-browsertype#browser-type-connect-option-expose-network), and some launch options, such as `headless` and `proxy`, from the client's `x-playwright-launch-options` header |
-| Server code | Node.js | Command line, as in [Playwright's Docker guide](https://playwright.dev/docs/docker#remote-connection) |
+**Control access and see usage.** A shared service needs authentication, a view
+of sessions and free capacity, and a way to end a session.
 
-Both modes reject a client whose Playwright major and minor version differ from
-the server's version. See
-[`browserType.connect()`](https://playwright.dev/docs/api/class-browsertype#browser-type-connect).
+## Comparison
 
-This gives you:
+| | Pool in your application | Playwright browser servers | BrowserThing |
+| --- | --- | --- | --- |
+| Reuse browsers | Yes | Yes | Yes |
+| Replace browsers | You build it | You build it | Built in |
+| Limit sessions | Your pool library | Your load balancer | Built in |
+| Wait for capacity | Your pool library | Your load balancer, if it has a queue | Built in |
+| Match versions | Not needed | A pool and a route for each version | Routes each client to a worker with the same version |
+| Handle failures | You build it | Health checks and restarts | Routes around failed workers; a restart policy restarts them |
+| Shut down | You build it | Drain in your load balancer and wait in your server code | Waits for sessions, up to a timeout |
+| Access control | Not needed | You build it | API keys |
+| Sessions and capacity | You build it | You build it | [REST API](/browserthing/docs/api/) |
+| Browser types | All | One for each server | Chromium, Firefox, and WebKit |
+| Share with other applications | No | Yes | Yes |
 
-- Browsers on separate hosts, with capacity that you scale separately from your
-  applications.
-- One endpoint for clients in every Playwright language.
-- With `launchServer()`, browser reuse between connections.
-- With `run-server`, a separate browser process for each connection. Each
-  connection pays the browser launch cost. See
-  [why browser reuse helps](/browserthing/docs/benchmarks/#why-browser-reuse-helps).
+In BrowserThing, `MAX_LIFETIME_SESSIONS` sets after how many sessions a worker
+replaces its browser. `MAX_SLOTS` limits the sessions on each worker.
+`MAX_QUEUE_SIZE` and `QUEUE_WAIT_TIMEOUT` control the queue, and
+`DRAIN_TIMEOUT` limits the wait during shutdown. See the
+[configuration reference](/browserthing/docs/configuration/).
 
-You build and run:
+## Trade-offs
 
-- A connection limit and a queue with a timeout for each container.
-  `launchServer()` accepts all connections into one browser. Configure the
-  limit and the queue in your load balancer.
-- A separate pool for each Playwright version, and for each browser type with
-  `launchServer()`. Route each client to the correct pool in the load balancer,
-  for example by its `User-Agent` header for the version and its
-  `x-playwright-browser` header for the browser type. Or give each pool its own
-  endpoint.
-- Browser replacement for `launchServer()`. Stop new connections to a container,
-  wait for its sessions, and then restart it.
-- Drain before a deploy or a scale-down, so that the load balancer stops new
-  connections before the container stops.
-- Health checks that remove a container that does not accept connections.
-  When a `launchServer()` browser exits, your server code must start a new
-  browser server or exit so that a supervisor restarts the container.
-- A view of active sessions and free capacity, and a way to end a session.
-- Authentication. A Playwright server has no API keys. `launchServer()` uses an
-  [unguessable path by default](https://playwright.dev/docs/api/class-browsertype#browser-type-launch-server-option-ws-path);
-  behind a load balancer, set the same path on every container or rewrite the
-  path in the load balancer.
-
-## What BrowserThing provides
-
-| Need | BrowserThing v0.7.0 |
-| --- | --- |
-| Playwright versions | The server selects a worker with the client's Playwright major and minor version. Workers with different versions can serve one endpoint. |
-| Browser types | Chromium, Firefox, and WebKit workers. Clients select one with the `browser` URL parameter. |
-| Slot limits | Each worker serves up to `MAX_SLOTS` sessions (default 5). |
-| Admission queue | Requests wait for a free slot, up to `MAX_QUEUE_SIZE` requests (default 100) and `QUEUE_WAIT_TIMEOUT` (default 30 seconds). |
-| Browser recycling | A worker drains after `MAX_LIFETIME_SESSIONS` session claims (default 50) and replaces its browser without a container restart. |
-| Drain on shutdown | On `SIGTERM`, a worker stops new sessions and waits up to `DRAIN_TIMEOUT` for active sessions. |
-| Dead workers | Workers send heartbeats. The server stops selecting a worker that stops sending them. Sessions without a heartbeat expire and free their slots. The server removes old worker records. |
-| Dial failures | If the server cannot connect to the selected worker, it marks that worker stalled and tries one other matching worker within `WORKER_DIAL_TIMEOUT`. |
-| REST API | `GET /v1/capacity`, `GET /v1/workers`, and `/v1/sessions` to create, read, and end sessions. |
-| API keys | Clients and workers authenticate with API keys. |
-
-See [architecture](/browserthing/docs/architecture/), the
-[configuration reference](/browserthing/docs/configuration/), and the
-[API guide](/browserthing/docs/api/) for details.
-
-## What stays the same
-
+- You deploy and update the BrowserThing server, PostgreSQL, and workers.
+- Browser commands go over the network, through the server, to the worker. A
+  pool in your application has no network hop.
+- A server outage ends the connections on that server.
 - Sessions on a worker share one browser process, as with `launchServer()`.
-  Browser contexts separate cookies and storage. A browser crash ends all
-  sessions on that worker.
-- Browser launch flags apply to the whole worker. Set session options such as
-  proxy, locale, and viewport through Playwright browser contexts.
-- The `connect()` option `exposeNetwork` has no effect, as with
-  `launchServer()`. Browsers on workers cannot reach your client's local network
-  through the connection.
-- If a browser crashes, its worker exits. A supervisor, such as the restart
-  policy in the supplied Compose file, must start the worker again. Your client
-  code decides whether to retry its work.
-- You deploy and update the server, PostgreSQL, and workers. Browser traffic
-  goes through the server. A server outage ends the connections on that server.
-- The pool is for your own applications and trusted clients. See the
+  Browser contexts separate cookies and storage, but a browser crash ends all
+  sessions on that worker. The worker then exits. A restart policy, such as the
+  one in the supplied Compose file, must start it again.
+- Browser launch flags apply to the whole worker. Set options for each session,
+  such as proxy and viewport, through browser contexts.
+- BrowserThing is for your own applications and trusted clients. See the
   [security boundary](/browserthing/docs/security/).
 
 ## When your own setup is enough
 
-- **Low volume.** If the launch cost for each task is acceptable, launch a
-  browser for each task with `chromium.launch()` or use `run-server`. Each task
-  then gets its own browser process.
-- **One application in one language.** A pool in the application is enough
-  when the browser load fits on your application hosts.
+- **Few tasks.** If the browser start time is acceptable, start a new browser
+  for each task, or use `run-server`.
+- **One application.** A pool in your application is enough when only that
+  application uses browsers and its hosts have CPU and memory for them.
 - **Test runs.** Playwright's
   [Docker guide](https://playwright.dev/docs/docker#remote-connection) uses
   `run-server` for remote test runs.
-- **One version and one browser type.** A small number of `launchServer()`
-  containers behind a load balancer can be enough when your clients limit
-  their own concurrency.
 
-BrowserThing applies when several applications or languages share browser
-capacity, when clients use different Playwright versions, or when you need
-queueing, recycling, and capacity data without building them.
+BrowserThing fits when several applications share browsers, when clients use
+different Playwright versions, or when you do not want to build the items in
+the comparison yourself.

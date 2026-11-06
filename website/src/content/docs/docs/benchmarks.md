@@ -42,9 +42,8 @@ For application tasks, browser reuse reduces session startup overhead. Page
 loading and browser actions still take time. Measure the complete task
 with your own pages before estimating the benefit for your application.
 
-Playwright's `browserType.launchServer()` can also reuse a browser between
-connections.
-See [compare with your own setup](/browserthing/docs/own-setup/).
+To compare BrowserThing with a setup that you build yourself, see
+[compare with your own setup](/browserthing/docs/own-setup/).
 
 Each session uses separate browser contexts for cookies, storage, and cache.
 Sessions on the same worker share a browser process. Browser launch options
