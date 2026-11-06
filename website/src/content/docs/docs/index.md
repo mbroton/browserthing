@@ -51,6 +51,8 @@ can share one internal browser endpoint, with browser capacity managed in one pl
 
 See [benchmark results](/browserthing/docs/benchmarks/) for task time and CPU use
 in a comparison with Browserless on the same hardware.
+To compare BrowserThing with a browser pool or Playwright browser servers that
+you run yourself, see [compare with your own setup](/browserthing/docs/own-setup/).
 
 ## Run your browser service
 
