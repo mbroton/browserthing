@@ -8,13 +8,15 @@ sessions to end when the containers restart.
 
 ## Choose a release
 
-| Component | Image for v0.7.0 |
+| Component | Image for v{{release}} |
 | --- | --- |
-| Server | `ghcr.io/mbroton/browserthing/server:0.7.0` |
-| Worker | `ghcr.io/mbroton/browserthing/worker:0.7.0` |
+| Server | `ghcr.io/mbroton/browserthing/server:{{release}}` |
+| Worker | `ghcr.io/mbroton/browserthing/worker:{{release}}` |
 
-Read the [release notes](https://github.com/mbroton/browserthing/releases) before
-you change the image tags. Pin both images to the same BrowserThing release.
+Read the [release notes](https://github.com/mbroton/browserthing/releases) of
+each release after your current one before you change the image tags. They
+describe the changes and any manual steps. Pin both images to the same
+BrowserThing release.
 
 ## Preserve the Compose project and database
 
@@ -49,63 +51,54 @@ docker compose ps
 The server applies database migrations when it starts. Check server and worker
 logs, then run a client connection using a compatible Playwright version.
 
-## Check client compatibility
+## When the Playwright version changes
 
 The client and worker need matching Playwright major and minor versions.
-The v0.7.0 worker uses **1.64.1**. Update client dependencies when a new worker
-image changes that version.
-
-## Upgrade from v0.6.1 to v0.7.0
-
-v0.7.0 changes the worker from Playwright 1.63.0 to 1.64.1. The server
-configuration, the API, and the database schema do not change. After the
-upgrade, update every client to Playwright 1.64:
-
-```sh
-npm install playwright@1.64.1
-python -m pip install playwright==1.64.0
-```
-
-Read the
-[Playwright 1.64 release notes](https://github.com/microsoft/playwright/releases/tag/v1.64.0)
+The v{{release}} worker uses **{{playwright}}**. The release notes say when a
+release changes the worker's major or minor version. Then update every client
+after the upgrade, and read the
+[Playwright release notes](https://github.com/microsoft/playwright/releases)
 for behavior changes that can affect your browser code.
 
-A 1.63 client cannot use a 1.64 worker. It waits in the server queue for
-`QUEUE_WAIT_TIMEOUT` (default 30 seconds). Then it gets `503` with the message
-`session queue wait timed out`.
+A client with the previous version cannot use the new workers. It waits in the
+server queue for `QUEUE_WAIT_TIMEOUT` (default 30 seconds). Then it gets `503`
+with a message such as
+`session queue wait timed out: no worker serves chromium with Playwright 1.63;
+registered workers: chromium 1.64.1`.
 
 ### Move clients gradually
 
-If you cannot update all clients at the same time, keep a v0.6.1 worker next to
-the v0.7.0 workers. Use this mixed setup only during the migration. The server
-sends each client to a worker with the same Playwright major and minor version:
+If you cannot update all clients at the same time, keep a worker of your current
+release next to the new workers. Use this mixed setup only during the migration.
+The server sends each client to a worker with the same Playwright major and
+minor version:
 
 ```text
-1.63 client --+                  +--> worker 0.6.1 (Playwright 1.63.0)
-              +--> server 0.7.0 -+
-1.64 client --+                  +--> worker 0.7.0 (Playwright 1.64.1)
+old client --+                +--> worker, current release (old Playwright)
+             +--> new server -+
+new client --+                +--> worker, new release (new Playwright)
 ```
 
 1. In your Compose file, copy the `worker` service to a new service named
-   `worker-previous`. Keep the `0.6.1` image on the copy. Change the `server`
-   and `worker` images to `0.7.0`:
+   `worker-previous`. Keep your current image tag on the copy. Change the
+   `server` and `worker` images to the new release:
 
    ```yaml
    services:
      server:
-       image: ghcr.io/mbroton/browserthing/server:0.7.0
+       image: ghcr.io/mbroton/browserthing/server:{{release}}
        # ...
      worker:
-       image: ghcr.io/mbroton/browserthing/worker:0.7.0
+       image: ghcr.io/mbroton/browserthing/worker:{{release}}
        # ...
      worker-previous:
-       image: ghcr.io/mbroton/browserthing/worker:0.6.1
+       image: ghcr.io/mbroton/browserthing/worker:<current release>
        # Copy all other settings from the worker service.
    ```
 
 2. Pull and restart as shown above.
-3. Update clients to Playwright 1.64.
-4. When no client uses Playwright 1.63, stop the old worker. It finishes open
+3. Update clients to the new Playwright version.
+4. When no client uses the old version, stop the old worker. It finishes open
    sessions first, for up to `DRAIN_TIMEOUT`:
 
    ```sh
@@ -118,7 +111,7 @@ sends each client to a worker with the same Playwright major and minor version:
    docker compose up -d --remove-orphans
    ```
 
-Each worker serves only clients of its own Playwright version. A 1.63 client
-cannot use a free slot on a 1.64 worker. `/v1/capacity` adds the slots of all
+Each worker serves only clients of its own Playwright version. An old client
+cannot use a free slot on a new worker. `/v1/capacity` adds the slots of all
 versions together, so use `/v1/workers` to see the version of each worker.
 Give each version enough slots for its clients.

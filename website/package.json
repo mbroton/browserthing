@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "check": "astro check",
-    "build": "astro build && node scripts/check-docs-output.mjs",
+    "build": "astro build && node scripts/fill-release.mjs && node scripts/check-docs-output.mjs",
     "preview": "astro preview"
   },
   "engines": {
@@ -13,6 +13,7 @@
     "npm": ">=9.6.5"
   },
   "dependencies": {
+    "@astrojs/markdown-satteri": "0.4.2",
     "@astrojs/starlight": "0.42.4",
     "astro": "7.3.5",
     "starlight-links-validator": "0.26.0",
