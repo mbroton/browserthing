@@ -1,4 +1,8 @@
 ---
+import Icon from '../components/Icon.astro';
+import mark from '../assets/mark.svg?url';
+import '@fontsource-variable/schibsted-grotesk';
+import '@fontsource/fragment-mono';
 import '../styles/landing.css';
 const base = import.meta.env.BASE_URL;
 ---
@@ -6,17 +10,31 @@ const base = import.meta.env.BASE_URL;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="robots" content="noindex" />
     <title>Page not found — BrowserThing</title>
     <link rel="icon" type="image/svg+xml" href={`${base}browserthing-icon.svg`} />
+    <script is:inline>
+      try {
+        const theme = localStorage.getItem('starlight-theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
   </head>
   <body>
-    <main>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href={base}><img src={mark} alt="" width="28" height="28" />BrowserThing</a>
+      </div>
+    </header>
+    <main class="not-found wrap">
       <h1>Page not found</h1>
-      <p>This address does not match a page on the site.</p>
-      <nav aria-label="Site links"><a href={base}>BrowserThing</a><a href={`${base}docs/`}>Documentation</a></nav>
+      <p class="lede">This address does not match a page on the site.</p>
+      <div class="actions">
+        <a class="button primary" href={`${base}docs/`}><Icon name="open-book" />Documentation</a>
+        <a class="button" href={base}><Icon name="left-arrow" />Home</a>
+      </div>
     </main>
   </body>
 </html>

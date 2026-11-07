@@ -1,22 +1,105 @@
+@import './tokens.css';
+
 :root {
-  --sl-color-accent-low: #142c61;
-  --sl-color-accent: #709cff;
-  --sl-color-accent-high: #c7d8ff;
-  --sl-font: 'Segoe UI', system-ui, sans-serif;
+  --sl-font: var(--sans);
+  --sl-font-mono: var(--mono);
+  --sl-color-white: var(--ink);
+  --sl-color-gray-1: var(--ink);
+  --sl-color-gray-2: var(--text);
+  --sl-color-gray-3: var(--muted);
+  --sl-color-gray-4: var(--line-strong);
+  --sl-color-gray-5: var(--line);
+  --sl-color-gray-6: var(--surface);
+  --sl-color-black: var(--paper);
+  --sl-color-accent-low: var(--go-soft);
+  --sl-color-accent: var(--go);
+  --sl-color-accent-high: #a6e3b2;
+  --sl-color-text-accent: var(--go-ink);
+  --sl-color-bg-inline-code: var(--surface);
+  --sl-color-hairline: var(--line);
+  --sl-color-hairline-light: var(--line);
+  --sl-color-hairline-shade: var(--line);
+  --sl-text-h1: var(--sl-text-4xl);
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #e8efff;
-  --sl-color-accent: #2456e8;
-  --sl-color-accent-high: #17377f;
-  --sl-color-bg: #fcfcfa;
+  --sl-color-gray-6: #ecece7;
+  --sl-color-gray-7: var(--paper);
+  --sl-color-accent: var(--go-ink);
+  --sl-color-accent-high: #0f4d1d;
+  --sl-color-bg-nav: var(--paper);
+  --sl-color-bg-sidebar: var(--paper);
 }
+
+body { -webkit-font-smoothing: antialiased; }
 
 .site-title {
-  font-weight: 750;
-  letter-spacing: -0.04em;
+  gap: 0.6rem;
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+}
+.site-title img { height: 1.75rem; width: auto; }
+
+header.header { border-bottom: 1px solid var(--line); }
+
+.sl-markdown-content :is(h1, h2, h3, h4) { letter-spacing: -0.025em; font-weight: 680; }
+h1#_top { font-weight: 740; letter-spacing: -0.035em; }
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--ink);
+  text-decoration-color: var(--go);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.22em;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover { text-decoration-color: currentColor; }
+
+.sl-markdown-content :not(pre) > code {
+  padding: 0.1em 0.4em;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  font-size: 0.88em;
 }
 
-.sl-markdown-content :is(h1, h2, h3) {
-  letter-spacing: -0.025em;
+.sl-markdown-content table { border-collapse: collapse; font-size: var(--sl-text-sm); }
+.sl-markdown-content :is(th, td) { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--line); }
+.sl-markdown-content th { color: var(--ink); background: var(--surface); text-align: left; }
+
+.sidebar-content .group-label .large {
+  color: var(--ink);
+  font-size: var(--sl-text-sm);
+  font-weight: 650;
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+starlight-toc a[aria-current='true'] { color: var(--ink); font-weight: 600; }
+
+.hero { grid-template-columns: 100%; padding-block: 1.5rem 1.75rem; border-bottom: 1px solid var(--line); }
+.hero .stack { gap: 1.5rem; }
+.hero h1 { font-size: clamp(2.2rem, 1.4rem + 2.6vw, 3.1rem); font-weight: 740; letter-spacing: -0.04em; }
+.hero .tagline { color: var(--text); font-size: var(--sl-text-xl); }
+.hero .actions { gap: 0.75rem 1rem; align-items: center; }
+.hero .sl-link-button { padding: 0.6rem 1.1rem; font-size: var(--sl-text-base); font-weight: 600; border-radius: 0.6rem; }
+.hero .sl-link-button.minimal { padding-inline: 0.5rem; }
+.hero .sl-link-button svg { width: 1.15rem; height: 1.15rem; font-size: 1.15rem !important; }
+.sl-link-button.primary { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+.sl-link-button.primary:hover { color: var(--paper); background: color-mix(in srgb, var(--ink) 85%, var(--paper)); }
+.sl-link-button.secondary { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.social-icons a { color: var(--muted); }
+.social-icons a:hover { color: var(--ink); }
+.starlight-aside--note {
+  --sl-color-asides-text-accent: var(--ink);
+  --sl-color-asides-border: var(--ink);
+  background-color: var(--surface);
+}
+.starlight-aside--tip {
+  --sl-color-asides-text-accent: var(--go-ink);
+  --sl-color-asides-border: var(--go);
+  background-color: var(--go-soft);
 }

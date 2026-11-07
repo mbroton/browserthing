@@ -1,9 +1,22 @@
 ---
 title: Overview
 description: A self-hosted browser pool for Playwright applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.
+hero:
+  tagline: Use Playwright in your app. Run browsers elsewhere.
+  actions:
+    - text: Quick start
+      link: /browserthing/docs/quick-start/
+      icon: rocket
+      variant: primary
+    - text: Connect with Playwright
+      link: /browserthing/docs/connect/
+      icon: laptop
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/mbroton/browserthing
+      icon: github
+      variant: minimal
 ---
-
-**Use Playwright in your app. Run browsers elsewhere.**
 
 BrowserThing is a self-hosted browser pool for applications using Playwright.
 It was built for workloads with many short browser tasks. Starting a new browser
