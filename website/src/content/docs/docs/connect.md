@@ -12,10 +12,10 @@ Application -> Playwright commands -> Browser worker
             <- Results            <-
 ```
 
-BrowserThing v0.7.0 images use Playwright **1.64.1**. A client needs the same
-major and minor version, so any 1.64 release works. The Python package has no
-1.64.1 release, so the Python example uses 1.64.0. Use `wss://` when your
-endpoint has TLS.
+BrowserThing v{{release}} images use Playwright **{{playwright}}**. A client needs
+the same major and minor version, so any {{playwright-minor}} release works. The
+Python package does not publish every patch release, so the Python example can
+use an earlier patch. Use `wss://` when your endpoint has TLS.
 
 The examples save a screenshot as a small browser task. Use the same connection
 for the browser actions your application needs.
@@ -23,7 +23,7 @@ for the browser actions your application needs.
 ## Node.js
 
 ```sh
-npm install playwright@1.64.1
+npm install playwright@{{playwright}}
 ```
 
 Save this as `connect.mjs`:
@@ -50,7 +50,7 @@ client machine. Replace `https://example.com` with your application's page URL.
 ## Python
 
 ```sh
-python -m pip install playwright==1.64.0
+python -m pip install playwright=={{playwright-python}}
 ```
 
 Save this as `connect.py`:
@@ -122,7 +122,7 @@ await webkitBrowser.close();
 ```
 
 The repository's
-[local Compose file](https://github.com/mbroton/browserthing/blob/v0.7.0/docker-compose.local.yaml)
+[local Compose file](https://github.com/mbroton/browserthing/blob/v{{release}}/docker-compose.local.yaml)
 shows a stack with all three browser types. It builds from source and requires a
 repository checkout.
 
@@ -138,7 +138,7 @@ const browser = await chromium.connect('wss://grid.example.com', {
 ```
 
 Clients can also pass `?token=pwd_...` in the URL. Keep keys out of source control
-and shared logs. Every valid key has full access to the service in v0.7.0. See
+and shared logs. Every valid key has full access to the service. See
 [security](/browserthing/docs/security/).
 
 ## Session lifetime
@@ -147,5 +147,5 @@ Create your own browser context after you connect. Close the browser connection
 in a `finally` block so the worker can release the session slot.
 
 A session ends when its connection closes. Reconnecting to a completed session
-is not supported in v0.7.0. The [API guide](/browserthing/docs/api/) explains how to create a
+is not supported. The [API guide](/browserthing/docs/api/) explains how to create a
 pending session and attach to it by ID.

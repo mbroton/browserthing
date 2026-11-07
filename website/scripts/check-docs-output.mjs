@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { placeholderPattern } from '../release.mjs';
 
 const output = new URL('../dist/', import.meta.url);
 const site = new URL('https://mbroton.github.io/browserthing/');
@@ -49,6 +51,19 @@ for (const name of ['llms-full.txt', 'llms-small.txt']) {
   const text = await readFile(new URL(name, output), 'utf8');
   assert.ok(text.includes('Every valid API key has full browser and control-plane access'), name);
   assert.ok(text.includes('remaining sessions are closed'), name);
+}
+
+for (const entry of await readdir(output, { recursive: true, withFileTypes: true })) {
+  if (!entry.isFile() || !/\.(html|md|txt|yaml)$/.test(entry.name)) continue;
+  const file = path.join(entry.parentPath, entry.name);
+  const match = (await readFile(file, 'utf8')).match(placeholderPattern);
+  assert.equal(match, null, `Unfilled release placeholder ${match?.[0]} in ${file}`);
+}
+
+const release = JSON.parse(await readFile(new URL('../release.json', import.meta.url), 'utf8'));
+const compose = await readFile(new URL('downloads/docker-compose.yaml', output), 'utf8');
+for (const image of ['server', 'worker']) {
+  assert.ok(compose.includes(`ghcr.io/mbroton/browserthing/${image}:${release.release}\n`), image);
 }
 
 console.log(`Checked Markdown exports for ${pages.length} docs pages and both documentation bundles.`);

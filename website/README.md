@@ -79,13 +79,17 @@ Page copy needs HTTPS or localhost because it uses the browser Clipboard API.
 
 ## Release updates
 
-The docs describe BrowserThing v0.7.0 and Playwright 1.64.1. When the
-documented release changes, update the release links, client install versions,
-and version labels together. Check that each client install version exists on
-npm and PyPI; the Python package does not publish every patch release. Refresh
-`public/downloads/docker-compose.yaml` from that release's root Compose file,
-with both BrowserThing image tags pinned to the release number. Keep the seccomp
-profile URL on the same release tag.
+`release.json` holds the documented BrowserThing release and its Playwright
+client versions. Docs pages and `public/downloads/docker-compose.yaml` use them
+through placeholders such as `{{release}}`, `{{playwright}}`,
+`{{playwright-minor}}`, and `{{playwright-python}}`. The build fills them and
+fails if a placeholder is left. When the documented release changes, update
+`release.json`. Check that each client version exists on npm and PyPI; the
+Python package does not publish every patch release. If the release changed the
+root Compose file, copy the change to `public/downloads/docker-compose.yaml`.
+
+Release-specific changes and upgrade steps go in the GitHub release notes, not
+in the upgrade guide.
 
 The README, server README, worker README, and OpenAPI document in the repository
 are the sources for the first set of guides. Check behavior against the release

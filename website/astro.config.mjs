@@ -3,11 +3,14 @@ import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightLlmsTxt from 'starlight-llms-txt';
 import starlightPageActions from 'starlight-page-actions';
+import { satteri } from '@astrojs/markdown-satteri';
+import { releasePlugin } from './release.mjs';
 
 export default defineConfig({
   site: 'https://mbroton.github.io',
   base: '/browserthing',
   trailingSlash: 'always',
+  markdown: { processor: satteri({ mdastPlugins: [releasePlugin] }) },
   integrations: [
     starlight({
       title: 'BrowserThing',

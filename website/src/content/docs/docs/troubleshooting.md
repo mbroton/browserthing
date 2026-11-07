@@ -25,7 +25,7 @@ Check the endpoint and browser type. `chromium.connect()` needs a Chromium
 worker. Firefox and WebKit need their own workers and `?browser=` selection.
 
 Check the client's Playwright version against the worker. The major and minor
-versions must match. BrowserThing v0.7.0 images use Playwright 1.64.1.
+versions must match. BrowserThing v{{release}} images use Playwright {{playwright}}.
 
 ## HTTP errors
 
@@ -65,8 +65,11 @@ increase `MAX_SLOTS`.
 
 For a `503` queue timeout, also check that a worker matches the requested browser
 and Playwright version. Free slots on a different browser or version cannot
-serve the request. Admission waits up to `QUEUE_WAIT_TIMEOUT` (30 seconds by
-default). After `Retry-After`, use a limited retry count with increasing delays.
+serve the request. If no registered worker matches, the message names the
+request and lists the registered workers, for example
+`session queue wait timed out: no worker serves chromium with Playwright 1.63;
+registered workers: chromium 1.64.1`. Admission waits up to
+`QUEUE_WAIT_TIMEOUT` (30 seconds by default). After `Retry-After`, use a limited retry count with increasing delays.
 
 ## Several sessions end together
 

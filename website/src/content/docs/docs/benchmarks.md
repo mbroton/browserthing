@@ -54,7 +54,7 @@ See [architecture](/browserthing/docs/architecture/) and the
 ## Measure your workload
 
 The repository includes
-[benchmark scripts](https://github.com/mbroton/browserthing/tree/v0.7.0/scripts/bench)
+[benchmark scripts](https://github.com/mbroton/browserthing/tree/v{{release}}/scripts/bench)
 for time to first page and session throughput. Use the
 [scaling guide](/browserthing/docs/scaling/#tune-slots) to tune worker capacity
 for your workload.
