@@ -1,6 +1,5 @@
 ---
 import Icon from './Icon.astro';
-import mark from '../assets/mark.svg?url';
 
 const apps = [
   { name: 'web-app', lang: 'Node.js', browsers: 'chromium', rate: 0.85 },
@@ -24,14 +23,12 @@ const limit = 50;
     <div class="apps" aria-hidden="true">
       {apps.map((app) => (
         <div class="app" data-browsers={app.browsers} data-rate={app.rate}>
-          <Icon name="laptop" size="1.1rem" />
-          <span><strong>{app.name}</strong><small>{app.lang}</small></span>
+          <strong>{app.name}</strong><small>{app.lang}</small>
         </div>
       ))}
     </div>
 
     <div class="hub" aria-hidden="true">
-      <img src={mark} alt="" width="28" height="28" />
       <strong>BrowserThing</strong>
       <code>ws://browserthing:8080</code>
       <span class="queue"></span>
@@ -40,10 +37,15 @@ const limit = 50;
     <div class="workers" aria-hidden="true">
       {workers.map((worker) => (
         <div class="worker" data-browser={worker.browser} data-life={worker.life} data-state="warm">
-          <span class="engine"><Icon name={worker.icon} size="1rem" /><strong>{worker.label}</strong></span>
-          <span class="state"><i></i><span>running</span></span>
-          <span class="slots">{Array.from({ length: slots }, () => <span class="slot"><i></i></span>)}</span>
-          <span class="life"><span class="bar"><i style={`width: ${(worker.life / limit) * 100}%`}></i></span><span class="count">{worker.life}/{limit}</span></span>
+          <div class="chrome">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="engine"><Icon name={worker.icon} size="0.95rem" /><strong>{worker.label}</strong></span>
+            <span class="state"><i></i><span>running</span></span>
+          </div>
+          <div class="body">
+            <span class="slots">{Array.from({ length: slots }, () => <span class="slot"><i></i></span>)}</span>
+            <span class="life"><span class="bar"><i style={`width: ${(worker.life / limit) * 100}%`}></i></span><span class="count">{worker.life}/{limit}</span></span>
+          </div>
         </div>
       ))}
     </div>
@@ -336,135 +338,129 @@ const limit = 50;
 
 <style>
   .pool {
-    --c-bg: #0f1828;
-    --c-panel: #152035;
-    --c-line: #26354f;
-    --c-text: #dbe3ee;
-    --c-dim: #8593a9;
-    --c-warm: #f5a524;
-    --c-wire: #7cc4e4;
     container-type: inline-size;
     margin: 0;
-    color: var(--c-text);
-    background: var(--c-bg);
-    border: 1px solid var(--console-edge, transparent);
-    border-radius: 18px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
     overflow: hidden;
   }
   .stage {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(140px, 0.9fr) minmax(190px, 1fr) minmax(330px, 2.1fr);
+    grid-template-columns: minmax(140px, 0.8fr) minmax(190px, 1fr) minmax(330px, 2.1fr);
     align-items: center;
     gap: 64px;
-    padding: 40px 36px 28px;
+    padding: 40px 36px 32px;
   }
   .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-  .wires :global(path) { fill: none; stroke: var(--c-line); stroke-width: 1.5; }
-  .wires :global(.dot) { fill: var(--c-wire); filter: drop-shadow(0 0 4px var(--c-wire)); }
-  .wires :global(.dot.result) { fill: var(--c-text); filter: none; }
+  .wires :global(path) { fill: none; stroke: var(--wire); stroke-width: 1.25; }
+  .wires :global(.dot) { fill: var(--go); }
+  .wires :global(.dot.result) { fill: var(--ink); }
   .wires :global(.dot.hidden) { display: none; }
 
   .apps, .workers { position: relative; display: grid; gap: 12px; }
   .app {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--c-panel);
-    border: 1px solid var(--c-line);
-    border-radius: 10px;
-    color: var(--c-dim);
-    transition: border-color .4s;
+    display: grid;
+    gap: 2px;
+    padding: 11px 14px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 8px;
   }
-  .app > span { display: grid; line-height: 1.25; }
-  .app strong { color: var(--c-text); font: 500 13px var(--mono); }
-  .app small { font-size: 12px; }
+  .app strong { color: var(--ink); font: 400 13.5px var(--mono); }
+  .app small { color: var(--muted); font-size: 12.5px; }
   .app:global(.done) { animation: done .6s ease-out; }
-  @keyframes done { from { border-color: var(--c-wire); } }
+  @keyframes done { from { border-color: var(--go); } }
 
   .hub {
     position: relative;
     display: grid;
     justify-items: center;
-    gap: 4px;
-    padding: 20px 14px 18px;
-    background: var(--c-panel);
-    border: 1px solid #3a4a66;
-    border-radius: 14px;
+    gap: 6px;
+    padding: 22px 14px;
+    color: var(--paper);
+    background: var(--ink);
+    border-radius: 12px;
     text-align: center;
   }
-  .hub img { margin-bottom: 6px; }
-  .hub strong { font-size: 15px; font-weight: 650; }
-  .hub code { color: var(--c-dim); font: 11.5px var(--mono); }
-  .queue { position: absolute; bottom: -14px; display: flex; gap: 4px; }
-  .queue :global(i) { width: 6px; height: 6px; background: var(--c-wire); border-radius: 50%; }
+  .hub strong { font-size: 16px; font-weight: 680; letter-spacing: -0.02em; }
+  .hub code { color: color-mix(in srgb, var(--paper) 62%, var(--ink)); font: 12px var(--mono); }
+  .queue { position: absolute; bottom: -16px; display: flex; gap: 4px; }
+  .queue :global(i) { width: 6px; height: 6px; background: var(--go); border-radius: 50%; }
 
   .worker {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas: 'engine state' 'slots life';
-    align-items: center;
-    gap: 10px 16px;
-    padding: 12px 14px;
-    background: var(--c-panel);
-    border: 1px solid var(--c-line);
-    border-radius: 10px;
-    transition: border-color .4s, opacity .4s;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    overflow: hidden;
+    transition: border-color .3s;
   }
-  .engine { grid-area: engine; display: flex; align-items: center; gap: 8px; color: var(--c-dim); }
-  .engine strong { color: var(--c-text); font-size: 13.5px; font-weight: 600; }
-  .state { grid-area: state; display: flex; align-items: center; justify-content: flex-end; gap: 7px; color: var(--c-dim); font: 11.5px var(--mono); }
-  .state i { width: 8px; height: 8px; background: var(--c-warm); border-radius: 50%; box-shadow: 0 0 10px 1px color-mix(in srgb, var(--c-warm) 70%, transparent); transition: background .3s, box-shadow .3s; }
-  .slots { grid-area: slots; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-  .slot { position: relative; height: 14px; border: 1px solid var(--c-line); border-radius: 4px; overflow: hidden; transition: border-color .3s, background-color .6s; }
-  .slot i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); background: color-mix(in srgb, var(--c-wire) 75%, transparent); }
-  .slot:global(.claimed) { border-color: var(--c-wire); }
-  .slot:global(.busy) { border-color: var(--c-wire); }
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 32px;
+    padding: 0 12px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .lights { display: flex; gap: 4px; }
+  .lights i { width: 7px; height: 7px; border: 1px solid var(--line-strong); border-radius: 50%; }
+  .engine { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .engine strong { color: var(--ink); font-size: 13px; font-weight: 600; }
+  .state { display: flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 12px; }
+  .state i { width: 6px; height: 6px; background: var(--go); border-radius: 50%; transition: background-color .3s; }
+  .body { display: flex; align-items: center; gap: 16px; padding: 11px 12px; transition: opacity .3s; }
+  .slots { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .slot { position: relative; height: 14px; background: var(--paper); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; transition: border-color .3s, background-color .6s; }
+  .slot i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); background: var(--go); }
+  .slot:global(.claimed), .slot:global(.busy) { border-color: var(--go); }
   .slot:global(.busy) i { animation: run var(--run, 2s) linear forwards; }
   .slot:global(.clean) { animation: clean .7s ease-out; }
   @keyframes run { from { transform: scaleX(.08); } to { transform: scaleX(1); } }
-  @keyframes clean { from { background-color: color-mix(in srgb, var(--c-text) 55%, transparent); border-color: var(--c-text); } }
+  @keyframes clean { from { background-color: var(--go-soft); border-color: var(--go); } }
   .pool:global(.still) .slot:global(.busy) i { animation: none; transform: scaleX(.6); }
 
-  .life { grid-area: life; display: flex; align-items: center; gap: 8px; color: var(--c-dim); font: 11.5px var(--mono); }
-  .bar { width: 56px; height: 4px; background: var(--c-line); border-radius: 2px; overflow: hidden; }
-  .bar i { display: block; height: 100%; background: var(--c-dim); transition: width .3s; }
+  .life { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 12px var(--mono); }
+  .bar { width: 48px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--muted); transition: width .3s; }
   .count { min-width: 5ch; text-align: right; font-variant-numeric: tabular-nums; }
 
-  .worker[data-state='draining'] { border-color: color-mix(in srgb, var(--c-warm) 55%, transparent); }
-  .worker[data-state='draining'] .state { color: var(--c-warm); }
+  .worker[data-state='draining'] { border-color: var(--ink); border-style: dashed; }
+  .worker[data-state='draining'] .state { color: var(--ink); }
   .worker[data-state='draining'] .state i { animation: blink .8s steps(2) infinite; }
-  .worker[data-state='draining'] .bar i { background: var(--c-warm); }
-  .worker[data-state='starting'] { opacity: .65; }
-  .worker[data-state='starting'] .state i { background: var(--c-dim); box-shadow: none; }
-  @keyframes blink { 50% { opacity: .25; } }
+  .worker[data-state='draining'] .bar i { background: var(--ink); }
+  .worker[data-state='starting'] .body { opacity: .35; }
+  .worker[data-state='starting'] .state i { background: var(--line-strong); }
+  @keyframes blink { 50% { opacity: .2; } }
 
   .readout {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 28px;
-    padding: 14px 36px 18px;
-    border-top: 1px solid var(--c-line);
-    color: var(--c-dim);
-    font-size: 13px;
+    gap: 8px 32px;
+    padding: 14px 36px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 14px;
   }
   .pool:global(.still) .readout { display: none; }
-  .readout b { color: var(--c-text); font: 500 15px var(--mono); font-variant-numeric: tabular-nums; }
-  .readout span:last-child b { color: var(--c-warm); }
+  .readout b { color: var(--ink); font: 400 15px var(--mono); font-variant-numeric: tabular-nums; }
 
   @container (max-width: 859px) {
-    .stage { grid-template-columns: 1fr; gap: 44px; padding: 24px 16px 24px 16px; }
+    .stage { grid-template-columns: 1fr; gap: 44px; padding: 24px 16px; }
     .apps { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .app { flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; text-align: center; }
-    .app > :global(svg) { display: none; }
-    .app strong { font-size: 11.5px; }
+    .app { justify-items: center; padding: 8px 4px; text-align: center; }
+    .app strong { font-size: 12px; }
     .app small { font-size: 11px; }
-    .hub { justify-self: center; width: min(100%, 260px); padding: 14px 12px; }
+    .hub { justify-self: center; width: min(100%, 260px); padding: 16px 12px; }
     .workers { padding-left: 24px; gap: 10px; }
-    .worker { padding: 10px; gap: 8px 10px; }
-    .bar { width: 32px; }
-    .readout { padding: 12px 16px 16px; }
+    .chrome { gap: 8px; padding: 0 10px; }
+    .lights { display: none; }
+    .body { gap: 10px; padding: 10px; }
+    .bar { width: 28px; }
+    .readout { padding: 12px 16px 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .pool *, .pool *::before, .pool *::after { transition: none !important; animation: none !important; }

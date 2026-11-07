@@ -1,0 +1,51 @@
+:root {
+  --paper: #f6f6f3;
+  --surface: #ffffff;
+  --ink: #17181b;
+  --text: #3c3e43;
+  --muted: #6b6e74;
+  --line: #deded8;
+  --line-strong: #c4c5bf;
+  --wire: #cdcec8;
+  --go: #23a03c;
+  --go-ink: #1a7d2f;
+  --go-soft: #d4efd9;
+  --stop: #c8462f;
+  --sans: 'Schibsted Grotesk Variable', system-ui, sans-serif;
+  --mono: 'Fragment Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #111213;
+    --surface: #18191b;
+    --ink: #ededea;
+    --text: #c8c9c5;
+    --muted: #8f918d;
+    --line: #2a2b2e;
+    --line-strong: #3d3e41;
+    --wire: #3a3b3f;
+    --go: #3dbb55;
+    --go-ink: #5fd173;
+    --go-soft: #1d3a24;
+    --stop: #e0664e;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #111213;
+  --surface: #18191b;
+  --ink: #ededea;
+  --text: #c8c9c5;
+  --muted: #8f918d;
+  --line: #2a2b2e;
+  --line-strong: #3d3e41;
+  --wire: #3a3b3f;
+  --go: #3dbb55;
+  --go-ink: #5fd173;
+  --go-soft: #1d3a24;
+  --stop: #e0664e;
+  color-scheme: dark;
+}

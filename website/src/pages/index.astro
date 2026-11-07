@@ -91,8 +91,8 @@ const features = [
     <meta property="og:title" content={`BrowserThing — ${headline}`} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={new URL(base, Astro.site)} />
-    <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a101b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111213" media="(prefers-color-scheme: dark)" />
     <script is:inline>
       try {
         const theme = localStorage.getItem('starlight-theme');
@@ -127,9 +127,6 @@ const features = [
                 <a class="button primary" href={`${docs}quick-start/`}><Icon name="rocket" />Quick start</a>
                 <a class="button" href={repo}><Icon name="github" />View on GitHub</a>
               </div>
-              <a class="release" href={`${repo}/releases/tag/v${release.release}`}>
-                <code>v{release.release}</code><span>with Playwright {release.playwright}</span>
-              </a>
             </div>
           </div>
         </div>
@@ -182,8 +179,8 @@ const features = [
             <button role="tab" id="tab-node" aria-controls="panel-node" aria-selected="true"><Icon name="node" />Node.js</button>
             <button role="tab" id="tab-python" aria-controls="panel-python" aria-selected="false" tabindex="-1">Python</button>
           </div>
-          <div role="tabpanel" id="panel-node" aria-labelledby="tab-node"><Code code={node} lang="js" theme="github-dark-default" /></div>
-          <div role="tabpanel" id="panel-python" aria-labelledby="tab-python" hidden><Code code={python} lang="python" theme="github-dark-default" /></div>
+          <div role="tabpanel" id="panel-node" aria-labelledby="tab-node"><Code code={node} lang="js" themes={{ light: 'github-light', dark: 'github-dark' }} /></div>
+          <div role="tabpanel" id="panel-python" aria-labelledby="tab-python" hidden><Code code={python} lang="python" themes={{ light: 'github-light', dark: 'github-dark' }} /></div>
         </div>
       </section>
 

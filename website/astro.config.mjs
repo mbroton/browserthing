@@ -25,7 +25,23 @@ export default defineConfig({
         '@fontsource/fragment-mono',
         './src/styles/docs.css',
       ],
-      expressiveCode: { styleOverrides: { borderRadius: '0.6rem' } },
+      expressiveCode: {
+        themes: ['github-dark', 'github-light'],
+        styleOverrides: {
+          borderRadius: '0.6rem',
+          borderColor: 'var(--line)',
+          codeBackground: 'var(--surface)',
+          frames: {
+            editorBackground: 'var(--surface)',
+            editorTabBarBackground: 'var(--paper)',
+            editorActiveTabBackground: 'var(--surface)',
+            terminalBackground: 'var(--surface)',
+            terminalTitlebarBackground: 'var(--paper)',
+            terminalTitlebarBorderBottomColor: 'var(--line)',
+            frameBoxShadowCssValue: 'none',
+          },
+        },
+      },
       plugins: [
         starlightLinksValidator(),
         starlightLlmsTxt(),
