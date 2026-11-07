@@ -6,7 +6,7 @@ import { ControlPlaneClient, ControlPlaneError } from './control-plane.js';
 import { Logger } from './logger.js';
 import { SessionGateway } from './gateway.js';
 
-type WorkerState = 'starting' | 'running' | 'draining' | 'shutting_down';
+type WorkerState = 'starting' | 'running' | 'draining' | 'recycling' | 'shutting_down';
 type WorkerStatus = 'available' | 'draining' | 'stalled' | 'shutting_down';
 
 export interface BrowserServerLike {
@@ -73,7 +73,6 @@ export class BrowserWorker {
     private browserServer: BrowserServerLike | null = null;
     private gateway: GatewayLike | null = null;
     private heartbeatTimer: NodeJS.Timeout | null = null;
-    private heartbeatEnabled = false;
     private drainTimer: NodeJS.Timeout | null = null;
     private recycleOnDrained = false;
     private recyclePromise: Promise<void> | null = null;
@@ -171,7 +170,6 @@ export class BrowserWorker {
                 return;
             }
             this.currentState = 'running';
-            this.heartbeatEnabled = true;
             this.armHeartbeat();
             this.logger.info('Browser worker is ready', {
                 workerId: this.workerIdValue,
@@ -195,7 +193,7 @@ export class BrowserWorker {
             await this.shutdown(0);
             return;
         }
-        if (this.currentState === 'starting') {
+        if (this.currentState === 'starting' || this.currentState === 'recycling') {
             await this.shutdown(0);
             return;
         }
@@ -250,7 +248,7 @@ export class BrowserWorker {
         // First of two bumps (the second is at completion): heartbeats
         // dispatched before this point must not act after the swap.
         this.recycleGeneration += 1;
-        this.currentState = 'starting';
+        this.currentState = 'recycling';
         this.logger.info('Recycling the browser in place');
         // A forced recycle (drain timeout) can still have live sessions;
         // close them first so the old browser shuts down promptly.
@@ -395,7 +393,7 @@ export class BrowserWorker {
     }
 
     private armHeartbeat(): void {
-        if (!this.heartbeatEnabled || this.currentState === 'shutting_down') {
+        if (!this.heartbeatEnabled) {
             return;
         }
         this.heartbeatTimer = setTimeout(() => void this.heartbeatTick(), this.config.lifecycle.heartbeatIntervalMs);
@@ -419,8 +417,7 @@ export class BrowserWorker {
             );
             if (
                 !this.heartbeatEnabled ||
-                this.currentState === 'starting' ||
-                this.currentState === 'shutting_down' ||
+                this.currentState === 'recycling' ||
                 this.workerIdValue !== workerId ||
                 this.recycleGeneration !== recycleGeneration
             ) {
@@ -440,7 +437,7 @@ export class BrowserWorker {
             }
         } catch (error) {
             if (
-                this.currentState === 'starting' ||
+                this.currentState === 'recycling' ||
                 this.workerIdValue !== workerId ||
                 this.recycleGeneration !== recycleGeneration
             ) {
@@ -464,7 +461,6 @@ export class BrowserWorker {
     }
 
     private stopHeartbeat(): void {
-        this.heartbeatEnabled = false;
         if (this.heartbeatTimer) {
             clearTimeout(this.heartbeatTimer);
             this.heartbeatTimer = null;
@@ -555,6 +551,10 @@ export class BrowserWorker {
                 clearTimeout(timer);
             }
         }
+    }
+
+    private get heartbeatEnabled(): boolean {
+        return this.currentState !== 'starting' && this.currentState !== 'shutting_down';
     }
 
     private get shutdownStarted(): boolean {

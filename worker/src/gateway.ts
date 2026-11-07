@@ -32,7 +32,6 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
     });
     private readonly webSocketServer = new WebSocketServer({ noServer: true });
     private readonly sessions = new Map<string, SessionSockets>();
-    private readonly pendingSessionIds = new Set<string>();
     private readonly pendingSessions = new Map<string, PendingSession>();
     private shuttingDown = false;
     private shutdownPromise: Promise<void> | null = null;
@@ -118,7 +117,6 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
         }
         for (const [sessionId, session] of this.pendingSessions) {
             this.pendingSessions.delete(sessionId);
-            this.pendingSessionIds.delete(sessionId);
             session.upstream.terminate();
             if (!session.clientSocket.destroyed) {
                 rejectUpgrade(session.clientSocket, 503, 'Worker is shutting down');
@@ -150,12 +148,11 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             rejectUpgrade(socket, 503, 'Worker is shutting down');
             return;
         }
-        if (this.pendingSessionIds.has(sessionId) || this.sessions.has(sessionId)) {
+        if (this.pendingSessions.has(sessionId) || this.sessions.has(sessionId)) {
             rejectUpgrade(socket, 409, 'Session is already connected');
             return;
         }
 
-        this.pendingSessionIds.add(sessionId);
         let upstream: WebSocket;
         try {
             // Node validates forwarded header values synchronously inside the
@@ -165,7 +162,6 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
                 handshakeTimeout: upstreamHandshakeTimeoutMs,
             });
         } catch {
-            this.pendingSessionIds.delete(sessionId);
             rejectUpgrade(socket, 502, 'Browser connection failed');
             return;
         }
@@ -183,7 +179,6 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             if (this.pendingSessions.get(sessionId)?.upstream !== upstream) {
                 return false;
             }
-            this.pendingSessionIds.delete(sessionId);
             this.pendingSessions.delete(sessionId);
             socket.off('close', abortDial);
             upstream.off('open', acceptClient);

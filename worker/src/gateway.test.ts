@@ -172,11 +172,11 @@ test('shutting down takes precedence over duplicate session rejection', async t 
     t.after(() => fixture.close());
     const internals = fixture.gateway as unknown as {
         shuttingDown: boolean;
-        pendingSessionIds: Set<string>;
+        pendingSessions: Map<string, unknown>;
         handleUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void;
     };
     internals.shuttingDown = true;
-    internals.pendingSessionIds.add(sessionId);
+    internals.pendingSessions.set(sessionId, { clientSocket: { destroyed: true }, upstream: { terminate() {} } });
     let response = '';
     const socket = new Duplex({
         read() {},
