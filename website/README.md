@@ -36,8 +36,10 @@ requests. External sites are not fetched during the build.
 
 ```text
 src/pages/index.astro          Landing page
+src/components/Pool.astro      Landing page animation of the browser pool
+src/components/Icon.astro      Landing page icons, copied from the Starlight icon set
 src/styles/landing.css         Landing page styles
-src/styles/docs.css            Starlight theme colors
+src/styles/docs.css            Starlight theme colors and fonts
 src/content/docs/docs/         Documentation at /docs/
 public/downloads/              Release-pinned quick-start files
 ```

@@ -1,0 +1,16 @@
+---
+import { icons, type IconName } from './icons';
+
+interface Props {
+  name: IconName;
+  size?: string;
+}
+
+const { name, size = '1em' } = Astro.props;
+---
+
+<svg class="icon" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={`font-size: ${size}`} set:html={icons[name]} />
+
+<style>
+  .icon { flex: none; width: 1em; height: 1em; }
+</style>

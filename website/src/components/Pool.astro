@@ -1,0 +1,472 @@
+---
+import Icon from './Icon.astro';
+import mark from '../assets/mark.svg?url';
+
+const apps = [
+  { name: 'web-app', lang: 'Node.js', browsers: 'chromium', rate: 0.85 },
+  { name: 'pdf-jobs', lang: 'Python', browsers: 'chromium', rate: 0.6 },
+  { name: 'e2e-tests', lang: 'Java', browsers: 'chromium firefox webkit', rate: 0.7 },
+];
+const workers = [
+  { browser: 'chromium', label: 'Chromium', icon: 'chrome', life: 41 },
+  { browser: 'chromium', label: 'Chromium', icon: 'chrome', life: 17 },
+  { browser: 'firefox', label: 'Firefox', icon: 'firefox', life: 33 },
+  { browser: 'webkit', label: 'WebKit', icon: 'safari', life: 46 },
+] as const;
+const slots = 5;
+const limit = 50;
+---
+
+<figure class="pool" id="pool" data-limit={limit}>
+  <div class="stage" role="img" aria-label="Three applications send Playwright sessions to one BrowserThing endpoint. The endpoint routes each session to a free slot on a worker with a running browser. When a session ends, its slot is cleaned and used again. After 50 sessions, a worker drains and starts a new browser.">
+    <svg class="wires" aria-hidden="true"><g class="wire-paths"></g><g class="dots"></g></svg>
+
+    <div class="apps" aria-hidden="true">
+      {apps.map((app) => (
+        <div class="app" data-browsers={app.browsers} data-rate={app.rate}>
+          <Icon name="laptop" size="1.1rem" />
+          <span><strong>{app.name}</strong><small>{app.lang}</small></span>
+        </div>
+      ))}
+    </div>
+
+    <div class="hub" aria-hidden="true">
+      <img src={mark} alt="" width="28" height="28" />
+      <strong>BrowserThing</strong>
+      <code>ws://browserthing:8080</code>
+      <span class="queue"></span>
+    </div>
+
+    <div class="workers" aria-hidden="true">
+      {workers.map((worker) => (
+        <div class="worker" data-browser={worker.browser} data-life={worker.life} data-state="warm">
+          <span class="engine"><Icon name={worker.icon} size="1rem" /><strong>{worker.label}</strong></span>
+          <span class="state"><i></i><span>running</span></span>
+          <span class="slots">{Array.from({ length: slots }, () => <span class="slot"><i></i></span>)}</span>
+          <span class="life"><span class="bar"><i style={`width: ${(worker.life / limit) * 100}%`}></i></span><span class="count">{worker.life}/{limit}</span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+  <div class="readout" aria-hidden="true">
+    <span><b data-count="sessions">0</b> sessions served</span>
+    <span><b data-count="starts">{workers.length}</b> browser starts</span>
+  </div>
+</figure>
+
+<script>
+  type Phase = 'toHub' | 'queued' | 'toWorker' | 'run' | 'back';
+  interface Worker {
+    el: HTMLElement;
+    browser: string;
+    life: number;
+    state: 'warm' | 'draining' | 'starting';
+    until: number;
+    slots: (Task | null)[];
+    slotEls: HTMLElement[];
+    path?: SVGPathElement;
+  }
+  interface App { el: HTMLElement; browsers: string[]; rate: number; next: number; path?: SVGPathElement }
+  interface Task { app: App; browser: string; phase: Phase; start: number; dur: number; worker?: Worker; slot?: number; dot: SVGCircleElement }
+
+  const SVG = 'http://www.w3.org/2000/svg';
+  const TO_HUB = 650;
+  const TO_WORKER = 550;
+  const BACK = 900;
+  const RESTART = 1600;
+
+  const pool = document.querySelector<HTMLElement>('#pool');
+  if (pool) start(pool);
+
+  function start(pool: HTMLElement) {
+    const stage = pool.querySelector<HTMLElement>('.stage')!;
+    const svg = stage.querySelector<SVGSVGElement>('.wires')!;
+    const pathLayer = svg.querySelector('.wire-paths')!;
+    const dotLayer = svg.querySelector('.dots')!;
+    const hub = stage.querySelector<HTMLElement>('.hub')!;
+    const queueEl = hub.querySelector<HTMLElement>('.queue')!;
+    const limit = Number(pool.dataset.limit);
+    const counters = {
+      sessions: pool.querySelector<HTMLElement>('[data-count="sessions"]')!,
+      starts: pool.querySelector<HTMLElement>('[data-count="starts"]')!,
+    };
+    const apps: App[] = [...stage.querySelectorAll<HTMLElement>('.app')].map((el) => ({
+      el,
+      browsers: el.dataset.browsers!.split(' '),
+      rate: Number(el.dataset.rate),
+      next: Math.random() * 600,
+    }));
+    const workers: Worker[] = [...stage.querySelectorAll<HTMLElement>('.worker')].map((el) => ({
+      el,
+      browser: el.dataset.browser!,
+      life: Number(el.dataset.life),
+      state: 'warm',
+      until: 0,
+      slots: [null, null, null, null, null],
+      slotEls: [...el.querySelectorAll<HTMLElement>('.slot')],
+    }));
+    const tasks: Task[] = [];
+    const queue: Task[] = [];
+    let now = 0;
+    let sessions = 0;
+    let starts = workers.length;
+    let running = false;
+    let last = 0;
+    let visible = false;
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    function layout() {
+      const box = stage.getBoundingClientRect();
+      svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+      const rel = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return { l: r.left - box.left, r: r.right - box.left, t: r.top - box.top, b: r.bottom - box.top, x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
+      };
+      const h = rel(hub);
+      const narrow = pool.clientWidth < 720;
+      pathLayer.replaceChildren();
+      const add = (d: string) => {
+        const p = document.createElementNS(SVG, 'path');
+        p.setAttribute('d', d);
+        pathLayer.append(p);
+        return p;
+      };
+      for (const app of apps) {
+        const a = rel(app.el);
+        if (narrow) {
+          const dy = (h.t - a.b) / 2;
+          app.path = add(`M${a.x} ${a.b} C${a.x} ${a.b + dy} ${h.x} ${h.t - dy} ${h.x} ${h.t}`);
+        } else {
+          const dx = (h.l - a.r) / 2;
+          app.path = add(`M${a.r} ${a.y} C${a.r + dx} ${a.y} ${h.l - dx} ${h.y} ${h.l} ${h.y}`);
+        }
+      }
+      for (const worker of workers) {
+        const w = rel(worker.el);
+        if (narrow) {
+          const gx = w.l - 12;
+          worker.path = add(`M${h.x} ${h.b} C${h.x} ${h.b + 24} ${gx} ${h.b + 4} ${gx} ${h.b + 36} L${gx} ${w.y - 10} Q${gx} ${w.y} ${gx + 10} ${w.y} L${w.l} ${w.y}`);
+        } else {
+          const dx = (w.l - h.r) / 2;
+          worker.path = add(`M${h.r} ${h.y} C${h.r + dx} ${h.y} ${w.l - dx} ${w.y} ${w.l} ${w.y}`);
+        }
+      }
+    }
+
+    const ease = (p: number) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
+
+    function place(dot: SVGCircleElement, path: SVGPathElement | undefined, p: number, reverse = false) {
+      if (!path) return;
+      const len = path.getTotalLength();
+      const e = ease(Math.min(Math.max(p, 0), 1));
+      const pt = path.getPointAtLength(len * (reverse ? 1 - e : e));
+      dot.setAttribute('cx', String(pt.x));
+      dot.setAttribute('cy', String(pt.y));
+    }
+
+    function spawn(app: App) {
+      const dot = document.createElementNS(SVG, 'circle');
+      dot.setAttribute('r', '3.5');
+      dot.classList.add('dot');
+      dotLayer.append(dot);
+      const browser = app.browsers.length > 1 ? pick(app.browsers, [0.5, 0.25, 0.25]) : app.browsers[0];
+      const task: Task = { app, browser, phase: 'toHub', start: now, dur: 1400 + Math.random() * 1900, dot };
+      place(dot, app.path, 0);
+      tasks.push(task);
+    }
+
+    function pick(items: string[], weights: number[]) {
+      let r = Math.random();
+      for (let i = 0; i < items.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return items[i];
+      }
+      return items[items.length - 1];
+    }
+
+    function assign(task: Task) {
+      const free = workers.filter((w) => w.browser === task.browser && w.state === 'warm' && w.slots.includes(null));
+      if (!free.length) return false;
+      const worker = free.reduce((best, w) => (w.life > best.life ? w : best));
+      const slot = worker.slots.indexOf(null);
+      worker.slots[slot] = task;
+      worker.life += 1;
+      if (worker.life >= limit) worker.state = 'draining';
+      task.worker = worker;
+      task.slot = slot;
+      task.phase = 'toWorker';
+      task.start = now;
+      task.dot.classList.remove('hidden');
+      setSlot(worker.slotEls[slot], 'claimed');
+      renderWorker(worker);
+      return true;
+    }
+
+    function setSlot(el: HTMLElement, state: 'claimed' | 'busy' | 'clean') {
+      el.classList.remove('claimed', 'busy', 'clean');
+      void el.offsetWidth;
+      el.classList.add(state);
+    }
+
+    function renderWorker(worker: Worker) {
+      const el = worker.el;
+      if (el.dataset.state !== worker.state) {
+        el.dataset.state = worker.state;
+        el.querySelector('.state > span')!.textContent = { warm: 'running', draining: 'draining', starting: 'new browser' }[worker.state];
+      }
+      el.querySelector<HTMLElement>('.bar > i')!.style.width = `${(worker.life / limit) * 100}%`;
+      el.querySelector('.count')!.textContent = `${worker.life}/${limit}`;
+    }
+
+    function renderQueue() {
+      const n = Math.min(queue.length, 6);
+      if (queueEl.childElementCount !== n) queueEl.replaceChildren(...Array.from({ length: n }, () => document.createElement('i')));
+    }
+
+    function step(dt: number) {
+      now += dt;
+      for (const app of apps) {
+        if (now >= app.next) {
+          spawn(app);
+          app.next = now + (-Math.log(1 - Math.random()) / app.rate) * 1000;
+        }
+      }
+      for (const task of [...tasks]) {
+        const age = now - task.start;
+        if (task.phase === 'toHub') {
+          place(task.dot, task.app.path, age / TO_HUB);
+          if (age >= TO_HUB) {
+            task.dot.classList.add('hidden');
+            task.phase = 'queued';
+            if (!assign(task)) queue.push(task);
+          }
+        } else if (task.phase === 'toWorker') {
+          place(task.dot, task.worker!.path, age / TO_WORKER);
+          if (age >= TO_WORKER) {
+            task.dot.classList.add('hidden');
+            task.phase = 'run';
+            task.start = now;
+            const slot = task.worker!.slotEls[task.slot!];
+            slot.style.setProperty('--run', `${task.dur}ms`);
+            setSlot(slot, 'busy');
+          }
+        } else if (task.phase === 'run') {
+          if (age >= task.dur) {
+            const worker = task.worker!;
+            worker.slots[task.slot!] = null;
+            const slot = worker.slotEls[task.slot!];
+            setSlot(slot, 'clean');
+            sessions += 1;
+            counters.sessions.textContent = sessions.toLocaleString('en');
+            task.phase = 'back';
+            task.start = now;
+            task.dot.classList.remove('hidden');
+            task.dot.classList.add('result');
+            task.dot.setAttribute('r', '2.5');
+          }
+        } else if (task.phase === 'back') {
+          const p = age / BACK;
+          if (p < 0.5) place(task.dot, task.worker!.path, p * 2, true);
+          else place(task.dot, task.app.path, (p - 0.5) * 2, true);
+          if (p >= 1) {
+            task.dot.remove();
+            tasks.splice(tasks.indexOf(task), 1);
+            task.app.el.classList.remove('done');
+            void task.app.el.offsetWidth;
+            task.app.el.classList.add('done');
+          }
+        }
+      }
+      for (const worker of workers) {
+        if (worker.state === 'draining' && worker.slots.every((s) => s === null)) {
+          worker.state = 'starting';
+          worker.until = now + RESTART;
+          renderWorker(worker);
+        } else if (worker.state === 'starting' && now >= worker.until) {
+          worker.state = 'warm';
+          worker.life = 0;
+          starts += 1;
+          counters.starts.textContent = String(starts);
+          renderWorker(worker);
+        }
+      }
+      for (const task of [...queue]) {
+        if (assign(task)) queue.splice(queue.indexOf(task), 1);
+      }
+      renderQueue();
+    }
+
+    function frame(time: number) {
+      if (!running) return;
+      step(Math.min(time - last, 100));
+      last = time;
+      requestAnimationFrame(frame);
+    }
+
+    function update() {
+      const should = visible && !document.hidden && !reduced.matches;
+      if (should && !running) {
+        running = true;
+        last = performance.now();
+        requestAnimationFrame(frame);
+      } else if (!should) {
+        running = false;
+      }
+      pool.classList.toggle('still', reduced.matches);
+    }
+
+    function still() {
+      const busy = [[0, 1, 2, 3, 4], [0, 1], [0], []];
+      workers.forEach((worker, i) => busy[i].forEach((s) => setSlot(worker.slotEls[s], 'busy')));
+    }
+
+    layout();
+    new ResizeObserver(layout).observe(stage);
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      update();
+    }).observe(stage);
+    document.addEventListener('visibilitychange', update);
+    reduced.addEventListener('change', update);
+    if (reduced.matches) still();
+    update();
+  }
+</script>
+
+<style>
+  .pool {
+    --c-bg: #0f1828;
+    --c-panel: #152035;
+    --c-line: #26354f;
+    --c-text: #dbe3ee;
+    --c-dim: #8593a9;
+    --c-warm: #f5a524;
+    --c-wire: #7cc4e4;
+    container-type: inline-size;
+    margin: 0;
+    color: var(--c-text);
+    background: var(--c-bg);
+    border: 1px solid var(--console-edge, transparent);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  .stage {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(140px, 0.9fr) minmax(170px, 1fr) minmax(330px, 2.1fr);
+    align-items: center;
+    gap: 64px;
+    padding: 40px 36px 28px;
+  }
+  .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .wires :global(path) { fill: none; stroke: var(--c-line); stroke-width: 1.5; }
+  .wires :global(.dot) { fill: var(--c-wire); filter: drop-shadow(0 0 4px var(--c-wire)); }
+  .wires :global(.dot.result) { fill: var(--c-text); filter: none; }
+  .wires :global(.dot.hidden) { display: none; }
+
+  .apps, .workers { position: relative; display: grid; gap: 12px; }
+  .app {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--c-panel);
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    color: var(--c-dim);
+    transition: border-color .4s;
+  }
+  .app > span { display: grid; line-height: 1.25; }
+  .app strong { color: var(--c-text); font: 500 13px var(--mono); }
+  .app small { font-size: 12px; }
+  .app:global(.done) { animation: done .6s ease-out; }
+  @keyframes done { from { border-color: var(--c-wire); } }
+
+  .hub {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    padding: 20px 14px 18px;
+    background: var(--c-panel);
+    border: 1px solid #3a4a66;
+    border-radius: 14px;
+    text-align: center;
+  }
+  .hub img { margin-bottom: 6px; }
+  .hub strong { font-size: 15px; font-weight: 650; }
+  .hub code { color: var(--c-dim); font: 11.5px var(--mono); }
+  .queue { position: absolute; bottom: -14px; display: flex; gap: 4px; }
+  .queue :global(i) { width: 6px; height: 6px; background: var(--c-wire); border-radius: 50%; }
+
+  .worker {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'engine state' 'slots life';
+    align-items: center;
+    gap: 10px 16px;
+    padding: 12px 14px;
+    background: var(--c-panel);
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    transition: border-color .4s, opacity .4s;
+  }
+  .engine { grid-area: engine; display: flex; align-items: center; gap: 8px; color: var(--c-dim); }
+  .engine strong { color: var(--c-text); font-size: 13.5px; font-weight: 600; }
+  .state { grid-area: state; display: flex; align-items: center; justify-content: flex-end; gap: 7px; color: var(--c-dim); font: 11.5px var(--mono); }
+  .state i { width: 8px; height: 8px; background: var(--c-warm); border-radius: 50%; box-shadow: 0 0 10px 1px color-mix(in srgb, var(--c-warm) 70%, transparent); transition: background .3s, box-shadow .3s; }
+  .slots { grid-area: slots; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .slot { position: relative; height: 14px; border: 1px solid var(--c-line); border-radius: 4px; overflow: hidden; transition: border-color .3s, background-color .6s; }
+  .slot i { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); background: color-mix(in srgb, var(--c-wire) 75%, transparent); }
+  .slot:global(.claimed) { border-color: var(--c-wire); }
+  .slot:global(.busy) { border-color: var(--c-wire); }
+  .slot:global(.busy) i { animation: run var(--run, 2s) linear forwards; }
+  .slot:global(.clean) { animation: clean .7s ease-out; }
+  @keyframes run { from { transform: scaleX(.08); } to { transform: scaleX(1); } }
+  @keyframes clean { from { background-color: color-mix(in srgb, var(--c-text) 55%, transparent); border-color: var(--c-text); } }
+  .pool:global(.still) .slot:global(.busy) i { animation: none; transform: scaleX(.6); }
+
+  .life { grid-area: life; display: flex; align-items: center; gap: 8px; color: var(--c-dim); font: 11.5px var(--mono); }
+  .bar { width: 56px; height: 4px; background: var(--c-line); border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--c-dim); transition: width .3s; }
+  .count { min-width: 5ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .worker[data-state='draining'] { border-color: color-mix(in srgb, var(--c-warm) 55%, transparent); }
+  .worker[data-state='draining'] .state { color: var(--c-warm); }
+  .worker[data-state='draining'] .state i { animation: blink .8s steps(2) infinite; }
+  .worker[data-state='draining'] .bar i { background: var(--c-warm); }
+  .worker[data-state='starting'] { opacity: .65; }
+  .worker[data-state='starting'] .state i { background: var(--c-dim); box-shadow: none; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  .readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    padding: 14px 36px 18px;
+    border-top: 1px solid var(--c-line);
+    color: var(--c-dim);
+    font-size: 13px;
+  }
+  .pool:global(.still) .readout { display: none; }
+  .readout b { color: var(--c-text); font: 500 15px var(--mono); font-variant-numeric: tabular-nums; }
+  .readout span:last-child b { color: var(--c-warm); }
+
+  @container (max-width: 719px) {
+    .stage { grid-template-columns: 1fr; gap: 44px; padding: 24px 16px 24px 16px; }
+    .apps { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .app { flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; text-align: center; }
+    .app > :global(svg) { display: none; }
+    .app strong { font-size: 11.5px; }
+    .app small { font-size: 11px; }
+    .hub { justify-self: center; width: min(100%, 260px); padding: 14px 12px; }
+    .workers { padding-left: 24px; gap: 10px; }
+    .worker { padding: 10px; gap: 8px 10px; }
+    .bar { width: 32px; }
+    .readout { padding: 12px 16px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pool *, .pool *::before, .pool *::after { transition: none !important; animation: none !important; }
+  }
+</style>

@@ -16,10 +16,16 @@ export default defineConfig({
       title: 'BrowserThing',
       description: 'A self-hosted browser pool for Playwright applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.',
       favicon: '/browserthing-icon.svg',
+      logo: { src: './src/assets/mark.svg' },
       disable404Route: true,
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mbroton/browserthing' }],
       editLink: { baseUrl: 'https://github.com/mbroton/browserthing/edit/main/website/' },
-      customCss: ['./src/styles/docs.css'],
+      customCss: [
+        '@fontsource-variable/schibsted-grotesk',
+        '@fontsource/fragment-mono',
+        './src/styles/docs.css',
+      ],
+      expressiveCode: { styleOverrides: { borderRadius: '0.6rem' } },
       plugins: [
         starlightLinksValidator(),
         starlightLlmsTxt(),

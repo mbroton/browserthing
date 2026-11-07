@@ -1,18 +1,88 @@
 ---
-import Architecture from '../components/Architecture.astro';
+import { Code } from 'astro:components';
+import Icon from '../components/Icon.astro';
+import Pool from '../components/Pool.astro';
+import mark from '../assets/mark.svg?url';
+import release from '../../release.json';
+import '@fontsource-variable/schibsted-grotesk';
+import '@fontsource/fragment-mono';
 import '../styles/landing.css';
 
 const base = import.meta.env.BASE_URL;
 const repo = 'https://github.com/mbroton/browserthing';
+const docs = `${base}docs/`;
 const headline = 'Use Playwright in your app. Run browsers elsewhere.';
 const description = 'A self-hosted browser pool for Playwright applications. Reuse running browsers for short tasks, with session cleanup and configurable browser recycling.';
+const minor = release.playwright.split('.').slice(0, 2).join('.');
+
+const node = `import { chromium } from 'playwright';
+
+const browser = await chromium.connect('ws://localhost:8080');
+try {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto('https://example.com');
+  await page.screenshot({ path: 'preview.png' });
+} finally {
+  await browser.close();
+}`;
+
+const python = `from playwright.async_api import async_playwright
+
+async with async_playwright() as p:
+    browser = await p.chromium.connect("ws://localhost:8080")
+    try:
+        context = await browser.new_context()
+        page = await context.new_page()
+        await page.goto("https://example.com")
+        await page.screenshot(path="preview.png")
+    finally:
+        await browser.close()`;
+
+const steps = [
+  {
+    title: 'Download the Compose file',
+    code: `curl -fsSLO https://mbroton.github.io/browserthing/downloads/docker-compose.yaml
+curl -fsSL --create-dirs -o worker/seccomp_profile.json \\
+  https://raw.githubusercontent.com/mbroton/browserthing/v${release.release}/worker/seccomp_profile.json`,
+  },
+  { title: 'Start the server, PostgreSQL, and a Chromium worker', code: 'docker compose up -d' },
+  { title: 'Install the matching Playwright client', code: `npm install playwright@${release.playwright}` },
+];
+
+const approaches = [
+  {
+    title: 'A new browser for each task',
+    text: 'Every task waits for a browser to start and pays for the start in CPU time.',
+    kind: 'launch',
+  },
+  {
+    title: 'One browser that never stops',
+    text: 'Memory use can grow over time. If the browser gets into a bad state, it stays there until someone restarts it.',
+    kind: 'forever',
+  },
+  {
+    title: 'A pool that recycles',
+    text: 'Tasks use browsers that are already running. Each browser is replaced after a set number of sessions.',
+    kind: 'recycle',
+  },
+];
+
+const features = [
+  { icon: 'server', title: 'Separate browser capacity', text: 'Run workers on their own hosts. Add workers when you need more sessions, without more application instances.' },
+  { icon: 'approve-check', title: 'Clean sessions', text: 'Each session uses its own browser context. The worker removes it when the connection closes.' },
+  { icon: 'random', title: 'Browser recycling', text: 'After 50 sessions by default, a worker stops new sessions, lets active ones finish, and starts a new browser.' },
+  { icon: 'clock', title: 'Admission queue', text: 'When every matching slot is busy, new connections can wait for a free slot instead of failing.' },
+  { icon: 'analytics', title: 'Capacity API', text: 'A REST API shows workers, sessions, and free capacity, so you can see the pool and plan for it.' },
+  { icon: 'padlock', title: 'API keys', text: 'Turn on API keys when other machines connect. Keys are stored as hashes in PostgreSQL.' },
+] as const;
 ---
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>{`BrowserThing — ${headline}`}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={new URL(base, Astro.site)} />
@@ -21,57 +91,195 @@ const description = 'A self-hosted browser pool for Playwright applications. Reu
     <meta property="og:title" content={`BrowserThing — ${headline}`} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={new URL(base, Astro.site)} />
-    <meta name="theme-color" content="#111111" />
+    <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a101b" media="(prefers-color-scheme: dark)" />
+    <script is:inline>
+      try {
+        const theme = localStorage.getItem('starlight-theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+      } catch {}
+    </script>
   </head>
   <body>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href={base}><img src={mark} alt="" width="28" height="28" />BrowserThing</a>
+        <nav aria-label="Main">
+          <a href={docs}><Icon name="open-book" /><span>Docs</span></a>
+          <a href={`${docs}benchmarks/`}><Icon name="analytics" /><span>Benchmarks</span></a>
+          <a class="github" href={repo}><Icon name="github" /><span>GitHub</span></a>
+        </nav>
+      </div>
+    </header>
+
     <main>
-      <h1>BrowserThing</h1>
-      <p class="description">{headline}</p>
+      <section class="hero wrap">
+        <div class="hero-text">
+          <h1><span>Use Playwright in your app.</span> <span>Run browsers elsewhere.</span></h1>
+          <div class="hero-side">
+            <p class="lede">
+              BrowserThing is a self-hosted browser pool for Playwright applications.
+              It keeps browsers running between short tasks, cleans up each session,
+              and replaces each browser after a set number of sessions.
+            </p>
+            <div>
+              <div class="actions">
+                <a class="button primary" href={`${docs}quick-start/`}><Icon name="rocket" />Quick start</a>
+                <a class="button" href={repo}><Icon name="github" />View on GitHub</a>
+              </div>
+              <a class="release" href={`${repo}/releases/tag/v${release.release}`}>
+                <code>v{release.release}</code><span>with Playwright {release.playwright}</span>
+              </a>
+            </div>
+          </div>
+        </div>
+        <Pool />
+        <p class="pool-caption">
+          Your applications connect to one endpoint. Each worker keeps one browser running and gives
+          every session its own context. After 50 sessions, a worker drains and starts a new browser.
+        </p>
+      </section>
 
-      <nav aria-label="Project links">
-        <a href={`${base}docs/`}>Documentation</a>
-        <a href={`${base}docs/benchmarks/`}>Benchmarks</a>
-        <a href={repo}>GitHub</a>
-        <a href={`${repo}/releases`}>Releases</a>
-      </nav>
+      <section class="why wrap" aria-labelledby="why-title">
+        <h2 id="why-title">Why a browser pool</h2>
+        <p class="section-lede">
+          Applications that run many short browser tasks, such as screenshots, PDFs, or checks,
+          usually start with one of the first two approaches.
+        </p>
+        <div class="approaches">
+          {approaches.map((a) => (
+            <article class:list={['approach', a.kind]}>
+              <div class="timeline" aria-hidden="true">
+                {a.kind === 'launch' && [1, 2, 3].map(() => <><i class="start" /><i class="task" /></>)}
+                {a.kind === 'forever' && <><i class="task" /><i class="task" /><i class="task" /><i class="task" /><i class="task" /><i class="task" /><svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 18 C30 17 55 12 100 2" /></svg></>}
+                {a.kind === 'recycle' && <><i class="start" /><i class="task" /><i class="task" /><i class="task" /><i class="task" /><i class="task" /><i class="start" /><i class="task" /><i class="task" /></>}
+              </div>
+              <h3>{a.title}</h3>
+              <p>{a.text}</p>
+            </article>
+          ))}
+        </div>
+        <p class="legend" aria-hidden="true"><span><i class="start" />Browser start</span><span><i class="task" />Task</span><span><i class="memory" />Memory use</span></p>
+      </section>
 
-      <p>
-        {description}
-      </p>
+      <section class="code wrap" aria-labelledby="code-title">
+        <div class="code-text">
+          <h2 id="code-title">Keep your Playwright code</h2>
+          <p>
+            Change <code>launch()</code> to <code>connect()</code> with the BrowserThing URL.
+            The browser steps stay in your application. BrowserThing selects a worker for the
+            browser type and Playwright version, and relays the session.
+          </p>
+          <ul class="facts">
+            <li><Icon name="laptop" />Node.js, Python, Java, and .NET clients</li>
+            <li><Icon name="window" />Chromium, Firefox, and WebKit workers</li>
+            <li><Icon name="information" />Clients use Playwright {minor}, the same major and minor version as the workers</li>
+          </ul>
+          <a class="text-link" href={`${docs}connect/`}><Icon name="document" />Connection examples</a>
+        </div>
+        <div class="tabs" data-tabs>
+          <div class="tab-list" role="tablist" aria-label="Client language">
+            <button role="tab" id="tab-node" aria-controls="panel-node" aria-selected="true"><Icon name="node" />Node.js</button>
+            <button role="tab" id="tab-python" aria-controls="panel-python" aria-selected="false" tabindex="-1">Python</button>
+          </div>
+          <div role="tabpanel" id="panel-node" aria-labelledby="tab-node"><Code code={node} lang="js" theme="github-dark-default" /></div>
+          <div role="tabpanel" id="panel-python" aria-labelledby="tab-python" hidden><Code code={python} lang="python" theme="github-dark-default" /></div>
+        </div>
+      </section>
 
-      <p>
-        BrowserThing was built for applications that run many short browser tasks.
-        Starting a new browser each time adds time and CPU use. Keeping the same
-        browser running indefinitely can let memory use grow or leave it in a bad
-        state. BrowserThing reuses running browsers and replaces them after a
-        configurable number of sessions.
-      </p>
+      <section class="features wrap" aria-labelledby="features-title">
+        <h2 id="features-title">Run the pool on your own machines</h2>
+        <ul>
+          {features.map((f) => (
+            <li>
+              <Icon name={f.icon} size="1.35rem" />
+              <h3>{f.title}</h3>
+              <p>{f.text}</p>
+            </li>
+          ))}
+        </ul>
+        <aside class="boundary">
+          <Icon name="warning" size="1.35rem" />
+          <div>
+            <h3>Built for your own applications</h3>
+            <p>
+              Browser contexts separate cookies and storage, but sessions share a browser process
+              on each worker. Use BrowserThing for your own applications and trusted clients.
+              You deploy and update the service.
+            </p>
+            <a class="text-link" href={`${docs}security/`}><Icon name="padlock" />Security boundary</a>
+          </div>
+        </aside>
+      </section>
 
-      <p>
-        Write normal Playwright code and connect through one WebSocket endpoint.
-        BrowserThing selects an available worker and cleans up each session when
-        its connection closes. Several applications can share the same internal
-        service.
-      </p>
-
-      <p>
-        Run workers on separate machines to keep browser CPU and memory use off
-        your application servers. Add workers when you need more browser capacity,
-        independently of your application instances.
-      </p>
-
-      <Architecture />
-
-      <p class="note">
-        You deploy and update the service for your own applications and trusted
-        clients. Browser contexts separate cookies and storage, but sessions
-        share a browser process on each worker. See the <a href={`${base}docs/security/`}>security boundary</a>.
-        Connect your application with the <a href={`${base}docs/quick-start/`}>quick start</a>.
-      </p>
-
-      <footer>
-        <span>Built by <a href="https://broton.dev">mbroton</a></span>
-      </footer>
+      <section class="start wrap" aria-labelledby="start-title">
+        <div class="start-head">
+          <h2 id="start-title">Start it locally</h2>
+          <p>You need Docker with the Compose plugin and Node.js 20 or later.</p>
+        </div>
+        <ol>
+          {steps.map((s) => (
+            <li>
+              <h3>{s.title}</h3>
+              <div class="command">
+                <pre><code>{s.code}</code></pre>
+                <button class="copy" type="button" data-copy={s.code.replace(/\\\n\s+/g, '')} aria-label={`Copy: ${s.title}`}>
+                  <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                  <svg class="icon-done" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <a class="button primary" href={`${docs}quick-start/`}><Icon name="rocket" />Read the quick start</a>
+      </section>
     </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <a class="brand" href={base}><img src={mark} alt="" width="24" height="24" />BrowserThing</a>
+        <nav aria-label="Project">
+          <a href={docs}><Icon name="open-book" />Docs</a>
+          <a href={`${docs}benchmarks/`}><Icon name="analytics" />Benchmarks</a>
+          <a href={`${repo}/releases`}><Icon name="rocket" />Releases</a>
+          <a href={`${repo}/issues`}><Icon name="comment-alt" />Issues</a>
+          <a href={repo}><Icon name="github" />GitHub</a>
+        </nav>
+        <p>Apache-2.0 license. Built by <a href="https://broton.dev">mbroton</a>.</p>
+      </div>
+    </footer>
+
+    <script>
+      for (const tabs of document.querySelectorAll<HTMLElement>('[data-tabs]')) {
+        const buttons = [...tabs.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+        const select = (button: HTMLButtonElement) => {
+          for (const b of buttons) {
+            const on = b === button;
+            b.setAttribute('aria-selected', String(on));
+            b.tabIndex = on ? 0 : -1;
+            document.getElementById(b.getAttribute('aria-controls')!)!.hidden = !on;
+          }
+        };
+        buttons.forEach((button, i) => {
+          button.addEventListener('click', () => select(button));
+          button.addEventListener('keydown', (event) => {
+            const move = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+            if (!move) return;
+            const next = buttons[(i + move + buttons.length) % buttons.length];
+            select(next);
+            next.focus();
+          });
+        });
+      }
+      for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy]')) {
+        button.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy!);
+            button.classList.add('copied');
+            setTimeout(() => button.classList.remove('copied'), 1500);
+          } catch {}
+        });
+      }
+    </script>
   </body>
 </html>
