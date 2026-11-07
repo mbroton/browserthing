@@ -27,17 +27,17 @@ try {
   await browser.close();
 }`;
 
-const python = `from playwright.async_api import async_playwright
+const python = `from playwright.sync_api import sync_playwright
 
-async with async_playwright() as p:
-    browser = await p.chromium.connect("ws://localhost:8080")
+with sync_playwright() as p:
+    browser = p.chromium.connect("ws://localhost:8080")
     try:
-        context = await browser.new_context()
-        page = await context.new_page()
-        await page.goto("https://example.com")
-        await page.screenshot(path="preview.png")
+        context = browser.new_context()
+        page = context.new_page()
+        page.goto("https://example.com")
+        page.screenshot(path="preview.png")
     finally:
-        await browser.close()`;
+        browser.close()`;
 
 const steps = [
   {

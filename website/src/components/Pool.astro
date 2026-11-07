@@ -124,7 +124,7 @@ const limit = 50;
         return { l: r.left - box.left, r: r.right - box.left, t: r.top - box.top, b: r.bottom - box.top, x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
       };
       const h = rel(hub);
-      const narrow = pool.clientWidth < 720;
+      const narrow = pool.clientWidth < 860;
       pathLayer.replaceChildren();
       const add = (d: string) => {
         const p = document.createElementNS(SVG, 'path');
@@ -354,7 +354,7 @@ const limit = 50;
   .stage {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(140px, 0.9fr) minmax(170px, 1fr) minmax(330px, 2.1fr);
+    grid-template-columns: minmax(140px, 0.9fr) minmax(190px, 1fr) minmax(330px, 2.1fr);
     align-items: center;
     gap: 64px;
     padding: 40px 36px 28px;
@@ -453,7 +453,7 @@ const limit = 50;
   .readout b { color: var(--c-text); font: 500 15px var(--mono); font-variant-numeric: tabular-nums; }
   .readout span:last-child b { color: var(--c-warm); }
 
-  @container (max-width: 719px) {
+  @container (max-width: 859px) {
     .stage { grid-template-columns: 1fr; gap: 44px; padding: 24px 16px 24px 16px; }
     .apps { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .app { flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; text-align: center; }
