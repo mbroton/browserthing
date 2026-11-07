@@ -614,6 +614,38 @@ test('a recycle 409 exits cleanly without registering again', async () => {
     assert.equal(worker.state, 'shutting_down');
 });
 
+test('a worker reports recycling during the swap and a drain request then shuts it down', async () => {
+    let releaseRecycle!: () => void;
+    const recycleGate = new Promise<void>(resolve => {
+        releaseRecycle = resolve;
+    });
+    let recycleStarted = false;
+    const controlPlane: ControlPlaneLike = {
+        register: async () => ({ id: 'worker-1' }),
+        recycle: async workerId => {
+            recycleStarted = true;
+            await recycleGate;
+            return { id: workerId };
+        },
+        heartbeat: async () => ({ status: 'available', stale_session_ids: [] }),
+        setStatus: async () => undefined,
+    };
+    const worker = createInjectedWorker(controlPlane, new FakeGateway(), 5_000);
+    await worker.start();
+
+    const recyclePromise = worker.requestDrain('control plane');
+    await waitFor(() => recycleStarted);
+    assert.equal(worker.state, 'recycling');
+
+    await worker.requestDrain('SIGTERM', true);
+    assert.equal(worker.state, 'shutting_down');
+    assert.equal(await worker.waitForExit(), 0);
+
+    releaseRecycle();
+    await recyclePromise;
+    assert.equal(worker.state, 'shutting_down');
+});
+
 test('a heartbeat 404 resolving during recycle does not register a duplicate worker', async () => {
     let releaseHeartbeat!: () => void;
     const heartbeatGate = new Promise<void>(resolve => {
