@@ -49,6 +49,11 @@ The admission queue is in memory and belongs to one server replica. The
 notifications wake queues on all replicas, and a one-second polling fallback
 keeps admission working while a notification listener reconnects.
 
+Requests for the same browser and Playwright major.minor version get slots in
+arrival order. A new request waits behind earlier requests, even when a slot is
+free. Requests for other browsers or versions wait in separate lines, so they
+do not block each other. Replicas do not share an order.
+
 A request also waits when no registered worker serves its browser and
 Playwright major.minor version, so a worker that is still starting can take
 it. If the wait times out, the `503` message names the requested browser and

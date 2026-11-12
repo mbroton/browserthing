@@ -118,7 +118,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, logger *slog.Logg
 			runtimeConfig.WorkerDialTimeout,
 		),
 	)
-	go scheduler.RunListener(servicesCtx, pool, sessionScheduler.Waker(), logger)
+	go scheduler.RunListener(servicesCtx, pool, sessionScheduler.Queue(), logger)
 	go rescuer.New(pool, logger, rescuer.Options{
 		WorkerTTL:        runtimeConfig.WorkerHeartbeatTTL,
 		SessionTTL:       runtimeConfig.SessionHeartbeatTTL,

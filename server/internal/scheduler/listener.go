@@ -15,10 +15,10 @@ const (
 	listenerMaxBackoff     = 5 * time.Second
 )
 
-func RunListener(ctx context.Context, pool *pgxpool.Pool, waker *Waker, logger *slog.Logger) {
+func RunListener(ctx context.Context, pool *pgxpool.Pool, queue *Queue, logger *slog.Logger) {
 	backoff := listenerInitialBackoff
 	for ctx.Err() == nil {
-		connected, err := listen(ctx, pool, waker)
+		connected, err := listen(ctx, pool, queue)
 		if ctx.Err() != nil {
 			return
 		}
@@ -33,7 +33,7 @@ func RunListener(ctx context.Context, pool *pgxpool.Pool, waker *Waker, logger *
 	}
 }
 
-func listen(ctx context.Context, pool *pgxpool.Pool, waker *Waker) (connected bool, err error) {
+func listen(ctx context.Context, pool *pgxpool.Pool, queue *Queue) (connected bool, err error) {
 	pooledConnection, err := pool.Acquire(ctx)
 	if err != nil {
 		return false, fmt.Errorf("acquiring listener connection: %w", err)
@@ -59,6 +59,6 @@ func listen(ctx context.Context, pool *pgxpool.Pool, waker *Waker) (connected bo
 			}
 			return true, fmt.Errorf("waiting for capacity notification: %w", err)
 		}
-		waker.Wake()
+		queue.Wake()
 	}
 }
