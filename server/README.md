@@ -32,7 +32,8 @@ The server uses these environment variables:
 - `DEFAULT_BROWSER_TYPE` selects the browser for `GET /` when the client does
   not set `?browser=`. Its default is `chromium`. Valid values are `chromium`,
   `firefox`, and `webkit`.
-- `WORKER_DIAL_TIMEOUT` is the total time limit for a worker WebSocket dial.
+- `WORKER_DIAL_TIMEOUT` is the total time limit for a worker WebSocket dial,
+  including retries after a network failure.
   Its default is `10s`. It must be less than the `15s` session reconciliation
   grace, or the server refuses to start.
 - `RELAY_WRITE_TIMEOUT` limits each relay write. Its default is `30s`.

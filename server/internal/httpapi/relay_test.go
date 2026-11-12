@@ -855,6 +855,138 @@ func TestRelay_VersionRoutingAndDialFailure(t *testing.T) {
 		}
 	})
 
+	t.Run("transport failure retries the same worker without stalling it", func(t *testing.T) {
+		truncateTables(t, pool)
+		worker := newEchoWorker(t)
+		address, accepted := newFlakyWorkerProxy(t, worker, 1)
+		workerID := insertRelayWorker(t, queries, address, "chromium", "1.62.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 0)
+
+		client, response, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil || response == nil || response.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("flaky worker relay response = %v, error = %v; want 101", response, err)
+		}
+		defer client.Close()
+		assertMessage(t, client, []byte("worker-ready"))
+
+		session := latestSession(t, pool, queries)
+		if session.WorkerID != workerID || session.Status != data.SessionStatusRunning {
+			t.Fatalf("session = %+v, want running session on the flaky worker", session)
+		}
+		current, err := queries.GetWorker(t.Context(), workerID)
+		if err != nil {
+			t.Fatalf("GetWorker() returned an error: %v", err)
+		}
+		if current.Status != data.WorkerStatusAvailable {
+			t.Fatalf("flaky worker status = %q, want %q", current.Status, data.WorkerStatusAvailable)
+		}
+		if accepted.Load() != 2 || worker.upgrades.Load() != 1 {
+			t.Fatalf("connections = %d, upgrades = %d; want 2 and 1", accepted.Load(), worker.upgrades.Load())
+		}
+		closeWebSocket(t, client, websocket.CloseNormalClosure, "done")
+		_ = receiveClose(t, worker, session.ID)
+	})
+
+	t.Run("temporary DNS failure moves the session without stalling the worker", func(t *testing.T) {
+		truncateTables(t, pool)
+		unresolvedID := insertRelayWorker(t, queries, "ws://unresolved-worker:3131/", "chromium", "1.62.1", 1)
+		if _, err := pool.Exec(
+			t.Context(),
+			"UPDATE workers SET lifetime_sessions = 20 WHERE id = $1",
+			unresolvedID,
+		); err != nil {
+			t.Fatalf("aging unresolved worker: %v", err)
+		}
+		replacement := newEchoWorker(t)
+		replacementID := insertRelayWorker(t, queries, replacement.wsURL(), "chromium", "1.62.1", 1)
+		var lookups atomic.Int32
+		netDial := func(ctx context.Context, network, address string) (net.Conn, error) {
+			if address == "unresolved-worker:3131" {
+				lookups.Add(1)
+				return nil, &net.OpError{Op: "dial", Net: network, Err: &net.DNSError{
+					Err:         "server misbehaving",
+					Name:        "unresolved-worker",
+					Server:      "127.0.0.11:53",
+					IsTemporary: true,
+				}}
+			}
+			return (&net.Dialer{}).DialContext(ctx, network, address)
+		}
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServerWithNetDial(t, pool, manager, logger, netDial)
+
+		client, response, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil || response == nil || response.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("DNS failure relay response = %v, error = %v; want 101", response, err)
+		}
+		defer client.Close()
+		assertMessage(t, client, []byte("worker-ready"))
+
+		session := latestSession(t, pool, queries)
+		if session.WorkerID != replacementID {
+			t.Fatalf("session worker = %s, want replacement %s", session.WorkerID, replacementID)
+		}
+		unresolved, err := queries.GetWorker(t.Context(), unresolvedID)
+		if err != nil {
+			t.Fatalf("GetWorker() returned an error: %v", err)
+		}
+		if unresolved.Status != data.WorkerStatusAvailable {
+			t.Fatalf("unresolved worker status = %q, want %q", unresolved.Status, data.WorkerStatusAvailable)
+		}
+		if lookups.Load() < 2 {
+			t.Fatalf("unresolved worker dials = %d, want at least 2", lookups.Load())
+		}
+		closeWebSocket(t, client, websocket.CloseNormalClosure, "done")
+		_ = receiveClose(t, replacement, session.ID)
+	})
+
+	t.Run("refused connection still stalls the worker and moves the session", func(t *testing.T) {
+		truncateTables(t, pool)
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("reserving a closed port: %v", err)
+		}
+		deadAddress := "ws://" + listener.Addr().String() + "/"
+		_ = listener.Close()
+		deadID := insertRelayWorker(t, queries, deadAddress, "chromium", "1.62.1", 1)
+		if _, err := pool.Exec(
+			t.Context(),
+			"UPDATE workers SET lifetime_sessions = 20 WHERE id = $1",
+			deadID,
+		); err != nil {
+			t.Fatalf("aging dead worker: %v", err)
+		}
+		replacement := newEchoWorker(t)
+		replacementID := insertRelayWorker(t, queries, replacement.wsURL(), "chromium", "1.62.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 0)
+
+		client, response, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil || response == nil || response.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("dead worker relay response = %v, error = %v; want 101", response, err)
+		}
+		defer client.Close()
+		assertMessage(t, client, []byte("worker-ready"))
+
+		session := latestSession(t, pool, queries)
+		if session.WorkerID != replacementID {
+			t.Fatalf("session worker = %s, want replacement %s", session.WorkerID, replacementID)
+		}
+		dead, err := queries.GetWorker(t.Context(), deadID)
+		if err != nil {
+			t.Fatalf("GetWorker() returned an error: %v", err)
+		}
+		if dead.Status != data.WorkerStatusStalled {
+			t.Fatalf("dead worker status = %q, want %q", dead.Status, data.WorkerStatusStalled)
+		}
+		closeWebSocket(t, client, websocket.CloseNormalClosure, "done")
+		_ = receiveClose(t, replacement, session.ID)
+	})
+
 	t.Run("client upgrade failure closes worker cleanly", func(t *testing.T) {
 		truncateTables(t, pool)
 		worker := newEchoWorker(t)
@@ -1541,6 +1673,70 @@ func newRelayHTTPServer(
 	httpServer := httptest.NewServer(server.Handler)
 	t.Cleanup(httpServer.Close)
 	return httpServer
+}
+
+func newRelayHTTPServerWithNetDial(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	manager *relay.Manager,
+	logger *slog.Logger,
+	netDial func(ctx context.Context, network, address string) (net.Conn, error),
+) *httptest.Server {
+	t.Helper()
+	handler := &relayHandler{
+		queries:        data.New(pool),
+		authenticator:  NoAuthAuthenticator{},
+		scheduler:      newTestSchedulerForRelay(pool, 0),
+		manager:        manager,
+		defaultBrowser: "chromium",
+		dialTimeout:    250 * time.Millisecond,
+		netDial:        netDial,
+		logger:         logger,
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", handler.implicit)
+	httpServer := httptest.NewServer(mux)
+	t.Cleanup(httpServer.Close)
+	return httpServer
+}
+
+// newFlakyWorkerProxy closes the first failures connections before any
+// handshake and forwards later connections to worker.
+func newFlakyWorkerProxy(t *testing.T, worker *echoWorker, failures int32) (string, *atomic.Int32) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listening for flaky worker proxy: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	target := strings.TrimPrefix(worker.server.URL, "http://")
+	var accepted atomic.Int32
+	go func() {
+		for {
+			connection, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			if accepted.Add(1) <= failures {
+				_ = connection.Close()
+				continue
+			}
+			go func() {
+				defer connection.Close()
+				upstream, err := net.Dial("tcp", target)
+				if err != nil {
+					return
+				}
+				defer upstream.Close()
+				go func() {
+					_, _ = io.Copy(upstream, connection)
+					_ = upstream.Close()
+				}()
+				_, _ = io.Copy(connection, upstream)
+			}()
+		}
+	}()
+	return "ws://" + listener.Addr().String() + "/", &accepted
 }
 
 func newTestSchedulerForRelay(pool *pgxpool.Pool, maxQueueSize int) *scheduler.Scheduler {
