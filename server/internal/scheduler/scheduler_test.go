@@ -853,8 +853,8 @@ func TestScheduler_QueueOrder(t *testing.T) {
 		for want := range 5 {
 			failAndWake(t, queries, sessionScheduler, occupant)
 			got := nextAdmission(t, admitted)
-			if got.index != want {
-				t.Fatalf("admission %d went to waiter %d, want waiter %d", want, got.index, want)
+			if got.err != nil || got.index != want {
+				t.Fatalf("admission %d went to waiter %d with error %v, want waiter %d", want, got.index, got.err, want)
 			}
 			occupant = got.session.ID
 		}
@@ -878,12 +878,12 @@ func TestScheduler_QueueOrder(t *testing.T) {
 		assertNoAdmission(t, admitted)
 		sessionScheduler.Queue().Wake()
 		first := nextAdmission(t, admitted)
-		if first.index != 0 {
-			t.Fatalf("free slot went to waiter %d, want the earlier waiter 0", first.index)
+		if first.err != nil || first.index != 0 {
+			t.Fatalf("free slot went to waiter %d with error %v, want the earlier waiter 0", first.index, first.err)
 		}
 		failAndWake(t, queries, sessionScheduler, first.session.ID)
-		if second := nextAdmission(t, admitted); second.index != 1 {
-			t.Fatalf("second slot went to waiter %d, want waiter 1", second.index)
+		if second := nextAdmission(t, admitted); second.err != nil || second.index != 1 {
+			t.Fatalf("second slot went to waiter %d with error %v, want waiter 1", second.index, second.err)
 		}
 	})
 
@@ -917,12 +917,12 @@ func TestScheduler_QueueOrder(t *testing.T) {
 			t.Fatalf("canceled first waiter result = waiter %d with %v, want waiter 0 with %v", got.index, got.err, context.Canceled)
 		}
 		got := nextAdmission(t, admitted)
-		if got.index != 1 {
-			t.Fatalf("slot freed before the first waiter left went to waiter %d, want waiter 1", got.index)
+		if got.err != nil || got.index != 1 {
+			t.Fatalf("slot freed before the first waiter left went to waiter %d with error %v, want waiter 1", got.index, got.err)
 		}
 		failAndWake(t, queries, sessionScheduler, got.session.ID)
-		if got := nextAdmission(t, admitted); got.index != 3 {
-			t.Fatalf("last slot went to waiter %d, want waiter 3", got.index)
+		if got := nextAdmission(t, admitted); got.err != nil || got.index != 3 {
+			t.Fatalf("last slot went to waiter %d with error %v, want waiter 3", got.index, got.err)
 		}
 		waitForQueueDepth(t, sessionScheduler, 0)
 	})
@@ -949,8 +949,8 @@ func TestScheduler_QueueOrder(t *testing.T) {
 		}
 		sessionScheduler.Queue().Wake()
 		for want := range 3 {
-			if got := nextAdmission(t, admitted); got.index != want {
-				t.Fatalf("admission %d went to waiter %d, want waiter %d", want, got.index, want)
+			if got := nextAdmission(t, admitted); got.err != nil || got.index != want {
+				t.Fatalf("admission %d went to waiter %d with error %v, want waiter %d", want, got.index, got.err, want)
 			}
 		}
 		waitForQueueDepth(t, sessionScheduler, 2)

@@ -84,8 +84,8 @@ BrowserThing and Browserless on the same hardware.
 queue depth. A queue that stays above zero, or repeated 429 responses, indicates
 that you should inspect capacity and worker health.
 
-Waiting requests get slots in arrival order on each server replica. Under a
-steady overload, each request waits about the same time.
+Requests for the same browser and Playwright version get slots in arrival
+order on each server replica.
 
 The default queue limit is 100 requests, with a 30-second wait timeout. These
 limits apply per server replica. See the [configuration reference](/browserthing/docs/configuration/).
