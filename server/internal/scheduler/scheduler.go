@@ -9,7 +9,6 @@ import (
 	"math/rand/v2"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,7 +63,7 @@ type Capacity struct {
 type Scheduler struct {
 	pool         *pgxpool.Pool
 	queries      *data.Queries
-	waker        *Waker
+	queue        *Queue
 	logger       *slog.Logger
 	lifecycleCtx context.Context
 
@@ -75,9 +74,6 @@ type Scheduler struct {
 	queueWaitTimeout    time.Duration
 	pollingInterval     time.Duration
 	reconciliationGrace time.Duration
-
-	queueMu sync.Mutex
-	queued  int
 }
 
 func New(
@@ -101,7 +97,7 @@ func New(
 	return &Scheduler{
 		pool:                pool,
 		queries:             data.New(pool),
-		waker:               NewWaker(),
+		queue:               newQueue(options.MaxQueueSize),
 		logger:              logger,
 		lifecycleCtx:        ctx,
 		workerTTL:           options.WorkerTTL,
@@ -201,6 +197,9 @@ func (e *NoMatchingWorkerError) Unwrap() error {
 }
 
 // Admit claims a session, waiting in the admission queue when no slot is free.
+// Requests for the same browser and Playwright version prefix are admitted in
+// arrival order. A request claims a slot at once only when no request of its
+// class waits.
 func (s *Scheduler) Admit(ctx context.Context, request ClaimRequest) (data.Session, error) {
 	session, err := s.admit(ctx, request)
 	if errors.Is(err, ErrWaitTimeout) {
@@ -235,25 +234,34 @@ func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Sessi
 	if s.isDraining() {
 		return data.Session{}, ErrDraining
 	}
-	session, err := s.Claim(ctx, request)
-	if err == nil {
-		return session, nil
+	class := queueClass{browser: request.Browser, versionPrefix: request.VersionPrefix}
+	if !s.queue.hasWaiters(class) {
+		session, err := s.Claim(ctx, request)
+		if err == nil {
+			return session, nil
+		}
+		if !errors.Is(err, ErrNoCapacity) {
+			return data.Session{}, err
+		}
+		if s.isDraining() {
+			return data.Session{}, ErrDraining
+		}
 	}
-	if !errors.Is(err, ErrNoCapacity) {
-		return data.Session{}, err
-	}
-	if s.isDraining() {
-		return data.Session{}, ErrDraining
-	}
-	if !s.enterQueue() {
+	ticket, ok := s.queue.enter(class)
+	if !ok {
 		return data.Session{}, ErrQueueFull
 	}
-	defer s.leaveQueue()
+	defer s.queue.leave(ticket)
 
-	wake, unsubscribe := s.waker.Subscribe()
-	defer unsubscribe()
 	waitCtx, cancel := context.WithTimeout(ctx, s.queueWaitTimeout)
 	defer cancel()
+	select {
+	case <-ticket.turn:
+	case <-waitCtx.Done():
+		return data.Session{}, s.queueWaitError(ctx, waitCtx)
+	case <-s.lifecycleCtx.Done():
+		return data.Session{}, ErrDraining
+	}
 	pollTimer := time.NewTimer(jitteredPollingInterval(s.pollingInterval))
 	defer pollTimer.Stop()
 	loggedClaimError := false
@@ -266,10 +274,9 @@ func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Sessi
 
 		claimCtx, cancelClaim := context.WithCancel(waitCtx)
 		stopDrainCancel := context.AfterFunc(s.lifecycleCtx, cancelClaim)
-		session, fullWorkerID, claimErr := s.claimOnce(claimCtx, request, excluded)
+		session, fullWorkerID, err := s.claimOnce(claimCtx, request, excluded)
 		stopDrainCancel()
 		cancelClaim()
-		err = claimErr
 		if err == nil {
 			return session, nil
 		}
@@ -297,7 +304,7 @@ func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Sessi
 			return data.Session{}, s.queueWaitError(ctx, waitCtx)
 		case <-s.lifecycleCtx.Done():
 			return data.Session{}, ErrDraining
-		case <-wake:
+		case <-ticket.turn:
 		case <-pollTimer.C:
 			pollTimer.Reset(jitteredPollingInterval(s.pollingInterval))
 		}
@@ -386,14 +393,12 @@ func (s *Scheduler) Heartbeat(
 	return worker, staleIDs, failedIDs, nil
 }
 
-func (s *Scheduler) Waker() *Waker {
-	return s.waker
+func (s *Scheduler) Queue() *Queue {
+	return s.queue
 }
 
 func (s *Scheduler) QueueDepth() int {
-	s.queueMu.Lock()
-	defer s.queueMu.Unlock()
-	return s.queued
+	return s.queue.Depth()
 }
 
 func (s *Scheduler) claimOnce(
@@ -548,22 +553,6 @@ func (s *Scheduler) queueWaitError(ctx, waitCtx context.Context) error {
 
 func (s *Scheduler) isDraining() bool {
 	return s.lifecycleCtx.Err() != nil
-}
-
-func (s *Scheduler) enterQueue() bool {
-	s.queueMu.Lock()
-	defer s.queueMu.Unlock()
-	if s.queued >= s.maxQueueSize {
-		return false
-	}
-	s.queued++
-	return true
-}
-
-func (s *Scheduler) leaveQueue() {
-	s.queueMu.Lock()
-	s.queued--
-	s.queueMu.Unlock()
 }
 
 func waitForRetry(ctx context.Context, delay time.Duration) error {

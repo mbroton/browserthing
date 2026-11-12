@@ -426,7 +426,7 @@ func TestScheduler_Queue(t *testing.T) {
 		}
 		listenerCtx, cancelListener := context.WithCancel(t.Context())
 		defer cancelListener()
-		go RunListener(listenerCtx, pool, scheduler.Waker(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+		go RunListener(listenerCtx, pool, scheduler.Queue(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 		result := make(chan error, 1)
 		go func() {
@@ -581,7 +581,7 @@ func TestScheduler_Queue(t *testing.T) {
 		if _, err := queries.FailSession(t.Context(), first.ID); err != nil {
 			t.Fatalf("FailSession() returned an error: %v", err)
 		}
-		sessionScheduler.Waker().Wake()
+		sessionScheduler.Queue().Wake()
 		select {
 		case <-commitEnded:
 		case <-time.After(time.Second):
@@ -797,7 +797,7 @@ func TestScheduler_Queue(t *testing.T) {
 
 		listenerResult := make(chan error, 1)
 		go func() {
-			_, err := listen(t.Context(), pool, sessionScheduler.Waker())
+			_, err := listen(t.Context(), pool, sessionScheduler.Queue())
 			listenerResult <- err
 		}()
 		listenerPID := waitForListenerBackend(t, pool)
@@ -833,6 +833,220 @@ func TestScheduler_Queue(t *testing.T) {
 			t.Fatal("queued Admit() was not admitted within polling fallback interval")
 		}
 	})
+}
+
+func TestScheduler_QueueOrder(t *testing.T) {
+	pool := newMigratedTestPool(t)
+	queries := data.New(pool)
+
+	t.Run("waiters are admitted in arrival order", func(t *testing.T) {
+		truncate(t, pool)
+		insertWorker(t, pool, queries, workerSpec{maxSlots: 1})
+		sessionScheduler := newOrderTestScheduler(pool)
+		occupant := claimOrFail(t, sessionScheduler)
+		admitted := make(chan orderAdmission, 5)
+		for index := range 5 {
+			startOrderedAdmit(t, sessionScheduler, t.Context(), ClaimRequest{Browser: "chromium"}, index, admitted)
+			waitForQueueDepth(t, sessionScheduler, index+1)
+		}
+
+		for want := range 5 {
+			failAndWake(t, queries, sessionScheduler, occupant)
+			got := nextAdmission(t, admitted)
+			if got.err != nil || got.index != want {
+				t.Fatalf("admission %d went to waiter %d with error %v, want waiter %d", want, got.index, got.err, want)
+			}
+			occupant = got.session.ID
+		}
+	})
+
+	t.Run("new request goes behind waiters when a slot is free", func(t *testing.T) {
+		truncate(t, pool)
+		insertWorker(t, pool, queries, workerSpec{maxSlots: 1})
+		sessionScheduler := newOrderTestScheduler(pool)
+		occupant := claimOrFail(t, sessionScheduler)
+		admitted := make(chan orderAdmission, 2)
+		startOrderedAdmit(t, sessionScheduler, t.Context(), ClaimRequest{Browser: "chromium"}, 0, admitted)
+		waitForQueueDepth(t, sessionScheduler, 1)
+		time.Sleep(50 * time.Millisecond)
+		if _, err := queries.FailSession(t.Context(), occupant); err != nil {
+			t.Fatalf("FailSession() returned an error: %v", err)
+		}
+
+		startOrderedAdmit(t, sessionScheduler, t.Context(), ClaimRequest{Browser: "chromium"}, 1, admitted)
+		waitForQueueDepth(t, sessionScheduler, 2)
+		assertNoAdmission(t, admitted)
+		sessionScheduler.Queue().Wake()
+		first := nextAdmission(t, admitted)
+		if first.err != nil || first.index != 0 {
+			t.Fatalf("free slot went to waiter %d with error %v, want the earlier waiter 0", first.index, first.err)
+		}
+		failAndWake(t, queries, sessionScheduler, first.session.ID)
+		if second := nextAdmission(t, admitted); second.err != nil || second.index != 1 {
+			t.Fatalf("second slot went to waiter %d with error %v, want waiter 1", second.index, second.err)
+		}
+	})
+
+	t.Run("waiters that leave keep the order of the others", func(t *testing.T) {
+		truncate(t, pool)
+		insertWorker(t, pool, queries, workerSpec{maxSlots: 1})
+		sessionScheduler := newOrderTestScheduler(pool)
+		occupant := claimOrFail(t, sessionScheduler)
+		admitted := make(chan orderAdmission, 4)
+		cancels := make([]context.CancelFunc, 4)
+		for index := range 4 {
+			requestCtx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			cancels[index] = cancel
+			startOrderedAdmit(t, sessionScheduler, requestCtx, ClaimRequest{Browser: "chromium"}, index, admitted)
+			waitForQueueDepth(t, sessionScheduler, index+1)
+		}
+
+		cancels[2]()
+		if got := nextAdmission(t, admitted); got.index != 2 || !errors.Is(got.err, context.Canceled) {
+			t.Fatalf("canceled waiter result = waiter %d with %v, want waiter 2 with %v", got.index, got.err, context.Canceled)
+		}
+		waitForQueueDepth(t, sessionScheduler, 3)
+
+		time.Sleep(50 * time.Millisecond)
+		if _, err := queries.FailSession(t.Context(), occupant); err != nil {
+			t.Fatalf("FailSession() returned an error: %v", err)
+		}
+		cancels[0]()
+		if got := nextAdmission(t, admitted); got.index != 0 || !errors.Is(got.err, context.Canceled) {
+			t.Fatalf("canceled first waiter result = waiter %d with %v, want waiter 0 with %v", got.index, got.err, context.Canceled)
+		}
+		got := nextAdmission(t, admitted)
+		if got.err != nil || got.index != 1 {
+			t.Fatalf("slot freed before the first waiter left went to waiter %d with error %v, want waiter 1", got.index, got.err)
+		}
+		failAndWake(t, queries, sessionScheduler, got.session.ID)
+		if got := nextAdmission(t, admitted); got.err != nil || got.index != 3 {
+			t.Fatalf("last slot went to waiter %d with error %v, want waiter 3", got.index, got.err)
+		}
+		waitForQueueDepth(t, sessionScheduler, 0)
+	})
+
+	t.Run("several free slots admit the first waiters", func(t *testing.T) {
+		truncate(t, pool)
+		insertWorker(t, pool, queries, workerSpec{maxSlots: 3})
+		sessionScheduler := newOrderTestScheduler(pool)
+		occupants := []uuid.UUID{
+			claimOrFail(t, sessionScheduler),
+			claimOrFail(t, sessionScheduler),
+			claimOrFail(t, sessionScheduler),
+		}
+		admitted := make(chan orderAdmission, 5)
+		for index := range 5 {
+			startOrderedAdmit(t, sessionScheduler, t.Context(), ClaimRequest{Browser: "chromium"}, index, admitted)
+			waitForQueueDepth(t, sessionScheduler, index+1)
+		}
+
+		for _, occupant := range occupants {
+			if _, err := queries.FailSession(t.Context(), occupant); err != nil {
+				t.Fatalf("FailSession() returned an error: %v", err)
+			}
+		}
+		sessionScheduler.Queue().Wake()
+		for want := range 3 {
+			if got := nextAdmission(t, admitted); got.err != nil || got.index != want {
+				t.Fatalf("admission %d went to waiter %d with error %v, want waiter %d", want, got.index, got.err, want)
+			}
+		}
+		waitForQueueDepth(t, sessionScheduler, 2)
+		assertNoAdmission(t, admitted)
+	})
+
+	t.Run("waiter that no worker serves does not block other requests", func(t *testing.T) {
+		truncate(t, pool)
+		insertWorker(t, pool, queries, workerSpec{maxSlots: 2})
+		sessionScheduler := newOrderTestScheduler(pool)
+		admitted := make(chan orderAdmission, 1)
+		startOrderedAdmit(
+			t,
+			sessionScheduler,
+			t.Context(),
+			ClaimRequest{Browser: "chromium", VersionPrefix: "1.99."},
+			0,
+			admitted,
+		)
+		waitForQueueDepth(t, sessionScheduler, 1)
+
+		for _, request := range []ClaimRequest{
+			{Browser: "chromium"},
+			{Browser: "chromium", VersionPrefix: "1.62."},
+		} {
+			if _, err := sessionScheduler.Admit(t.Context(), request); err != nil {
+				t.Fatalf("Admit(%+v) returned an error: %v", request, err)
+			}
+		}
+		waitForQueueDepth(t, sessionScheduler, 1)
+	})
+}
+
+type orderAdmission struct {
+	index   int
+	session data.Session
+	err     error
+}
+
+func newOrderTestScheduler(pool *pgxpool.Pool) *Scheduler {
+	sessionScheduler := newTestScheduler(pool, 10, 0)
+	sessionScheduler.pollingInterval = time.Hour
+	sessionScheduler.queueWaitTimeout = 30 * time.Second
+	return sessionScheduler
+}
+
+func claimOrFail(t *testing.T, sessionScheduler *Scheduler) uuid.UUID {
+	t.Helper()
+	session, err := sessionScheduler.Claim(t.Context(), ClaimRequest{Browser: "chromium"})
+	if err != nil {
+		t.Fatalf("Claim() returned an error: %v", err)
+	}
+	return session.ID
+}
+
+func startOrderedAdmit(
+	t *testing.T,
+	sessionScheduler *Scheduler,
+	ctx context.Context,
+	request ClaimRequest,
+	index int,
+	admitted chan<- orderAdmission,
+) {
+	t.Helper()
+	go func() {
+		session, err := sessionScheduler.Admit(ctx, request)
+		admitted <- orderAdmission{index: index, session: session, err: err}
+	}()
+}
+
+func failAndWake(t *testing.T, queries *data.Queries, sessionScheduler *Scheduler, sessionID uuid.UUID) {
+	t.Helper()
+	if _, err := queries.FailSession(t.Context(), sessionID); err != nil {
+		t.Fatalf("FailSession() returned an error: %v", err)
+	}
+	sessionScheduler.Queue().Wake()
+}
+
+func nextAdmission(t *testing.T, admitted <-chan orderAdmission) orderAdmission {
+	t.Helper()
+	select {
+	case got := <-admitted:
+		return got
+	case <-time.After(2 * time.Second):
+		t.Fatal("no queued request returned")
+		return orderAdmission{}
+	}
+}
+
+func assertNoAdmission(t *testing.T, admitted <-chan orderAdmission) {
+	t.Helper()
+	select {
+	case got := <-admitted:
+		t.Fatalf("waiter %d returned early with error %v", got.index, got.err)
+	case <-time.After(50 * time.Millisecond):
+	}
 }
 
 func TestScheduler_HeartbeatReconciliationAndRecycling(t *testing.T) {

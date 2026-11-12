@@ -52,7 +52,8 @@ have separate browser contexts, but share the worker's browser process.
 5. When the connection closes, the worker cleans up the session's resources.
 
 When all matching slots are busy, requests can wait in the server's admission
-queue. Each server replica has its own queue. See
+queue. Requests for the same browser and Playwright version get slots in
+arrival order. Each server replica has its own queue. See
 [queue settings](/browserthing/docs/configuration/#server).
 
 ## Worker recycling and failures
