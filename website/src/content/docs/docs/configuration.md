@@ -24,7 +24,7 @@ Server duration values use Go duration notation, such as `10s` or `5m`.
 | `PENDING_SESSION_TTL` | `30s` | Maximum time a claimed session can remain pending. |
 | `STALLED_WORKER_TTL` | `10m` | Time before an idle stalled worker record is removed. |
 | `RESCUER_INTERVAL` | `5s` | Base interval between recovery sweeps, with 20% jitter. |
-| `WORKER_DIAL_TIMEOUT` | `10s` | Total time limit for the server's WebSocket dial to a worker. |
+| `WORKER_DIAL_TIMEOUT` | `10s` | Total time limit for the server's WebSocket dial to a worker, including retries after a network failure. |
 | `RELAY_WRITE_TIMEOUT` | `30s` | Time limit for each relay write. |
 | `RELAY_PING_INTERVAL` | `20s` | Interval between relay WebSocket pings. |
 | `RELAY_PONG_TIMEOUT` | `60s` | Maximum time without data or a pong from a peer. |

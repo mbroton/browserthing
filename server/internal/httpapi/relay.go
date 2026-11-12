@@ -28,11 +28,19 @@ type relayHandler struct {
 	manager        *relay.Manager
 	defaultBrowser string
 	dialTimeout    time.Duration
+	netDial        func(ctx context.Context, network, address string) (net.Conn, error)
 	logger         *slog.Logger
 	upgrader       websocket.Upgrader
 }
 
 const relayTransitionTimeout = 5 * time.Second
+
+var sameWorkerRetryDelays = []time.Duration{
+	100 * time.Millisecond,
+	200 * time.Millisecond,
+	400 * time.Millisecond,
+	800 * time.Millisecond,
+}
 
 func registerRelayRoutes(
 	mux *http.ServeMux,
@@ -225,17 +233,19 @@ func (h *relayHandler) dialWorkerWithRetry(
 	excludedWorkerIDs := []uuid.UUID{}
 	dialErrors := []error{}
 	for attempt := range 2 {
-		worker, err := h.dialWorker(dialCtx, request, session)
+		worker, err := h.dialSameWorker(dialCtx, request, session)
 		if err == nil {
 			return worker, nil
 		}
 		dialErrors = append(dialErrors, fmt.Errorf("worker %s: %w", session.WorkerID, err))
 		excludedWorkerIDs = append(excludedWorkerIDs, session.WorkerID)
 
-		if _, stallErr := h.queries.StallWorker(request.Context(), session.WorkerID); stallErr != nil &&
-			!errors.Is(stallErr, pgx.ErrNoRows) {
-			dialErrors = append(dialErrors, fmt.Errorf("stalling failed worker: %w", stallErr))
-			return nil, errors.Join(dialErrors...)
+		if !isTemporaryDNSError(err) {
+			if _, stallErr := h.queries.StallWorker(request.Context(), session.WorkerID); stallErr != nil &&
+				!errors.Is(stallErr, pgx.ErrNoRows) {
+				dialErrors = append(dialErrors, fmt.Errorf("stalling failed worker: %w", stallErr))
+				return nil, errors.Join(dialErrors...)
+			}
 		}
 		if attempt == 1 || h.scheduler == nil {
 			break
@@ -248,6 +258,42 @@ func (h *relayHandler) dialWorkerWithRetry(
 	}
 
 	return nil, errors.Join(dialErrors...)
+}
+
+// dialSameWorker retries transport failures on the session's worker with a
+// short backoff. A worker that answers the handshake with an HTTP error is
+// reachable, so its answer is final.
+func (h *relayHandler) dialSameWorker(
+	ctx context.Context,
+	request *http.Request,
+	session data.Session,
+) (*websocket.Conn, error) {
+	for attempt := 0; ; attempt++ {
+		worker, err := h.dialWorker(ctx, request, session)
+		if err == nil ||
+			errors.Is(err, websocket.ErrBadHandshake) ||
+			attempt == len(sameWorkerRetryDelays) {
+			return worker, err
+		}
+		delay := sameWorkerRetryDelays[attempt]
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= delay {
+			return nil, err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, err
+		case <-timer.C:
+		}
+	}
+}
+
+// isTemporaryDNSError reports a resolver failure that says nothing about the
+// worker's health, such as a SERVFAIL from the container network's DNS.
+func isTemporaryDNSError(err error) bool {
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr) && dnsErr.IsTemporary
 }
 
 func (h *relayHandler) dialWorker(
@@ -272,7 +318,7 @@ func (h *relayHandler) dialWorker(
 		}
 	}
 	headers.Set("x-pwd-session-id", session.ID.String())
-	dialer := websocket.Dialer{HandshakeTimeout: h.dialTimeout}
+	dialer := websocket.Dialer{HandshakeTimeout: h.dialTimeout, NetDialContext: h.netDial}
 	connection, response, err := dialer.DialContext(ctx, session.WorkerAddress, headers)
 	if response != nil && response.Body != nil {
 		_ = response.Body.Close()
