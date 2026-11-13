@@ -56,6 +56,7 @@ Worker time values are integer **seconds**.
 | `PRIVATE_HOSTNAME` | Machine hostname | Address advertised to the server. It must be reachable from the server. |
 | `MAX_SLOTS` | `5` | Concurrent sessions per worker, from 1 to 1024. |
 | `HEADLESS` | `true` | Run the browser without a visible window. |
+| `BROWSER_ARGS` | Unset | Extra browser command-line flags, as a JSON array of strings. |
 | `HEARTBEAT_INTERVAL` | `5` | Interval between worker heartbeats. |
 | `DRAIN_TIMEOUT` | `300` | Maximum wait for open sessions on the old browser after a recycle, or during shutdown. Remaining sessions close when it expires. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, or `error`. |
@@ -65,7 +66,26 @@ The supplied Compose file sets `DRAIN_TIMEOUT=30` and a 60-second container
 stop grace period. If you increase the drain timeout, keep the stop grace
 period above `DRAIN_TIMEOUT + 20` seconds for cleanup.
 
-Browser command-line flags are fixed when a worker starts. Set session options
-such as proxy, locale, viewport, and cookies through Playwright browser contexts.
+Clients can not send browser command-line flags, because the worker launches
+the browser before sessions connect. To apply flags to all sessions on a
+worker, set `BROWSER_ARGS`:
+
+```sh
+BROWSER_ARGS='["--disable-blink-features=AutomationControlled"]'
+```
+
+The worker passes the flags to each browser that it launches, also after a
+recycle. Each browser type accepts different flags, and an unknown flag can be
+ignored without an error. Invalid JSON, or an item that is not a string, stops
+the worker at start.
+
+The worker refuses flags that turn off the Chromium sandbox: `--no-sandbox`,
+`--disable-setuid-sandbox`, `--disable-namespace-sandbox`,
+`--disable-seccomp-filter-sandbox`, and `--disable-gpu-sandbox`. This check
+catches mistakes. It is not a security boundary: other flags can also make the
+browser less safe, so set only flags that you trust.
+
+Set session options such as proxy, locale, viewport, and cookies through
+Playwright browser contexts.
 
 See [scaling](/browserthing/docs/scaling/) for slot tuning and remote worker examples.

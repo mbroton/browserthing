@@ -154,9 +154,9 @@ browser process on each worker:
 
 - Browser contexts do not provide a separate operating system boundary for each
   session. See [Security boundary](#security-boundary).
-- Browser command-line flags are set when the worker starts, so one session
-  cannot bring its own — say, a browser extension — the way a
-  freshly-launched browser can. Per-session proxy, locale, viewport, and
+- Browser command-line flags are set when the worker starts, with
+  `BROWSER_ARGS`, so one session cannot bring its own — say, a browser
+  extension — the way a freshly-launched browser can. Per-session proxy, locale, viewport, and
   cookies work as usual via contexts.
 - If the shared browser crashes, all sessions on that worker end with it.
   BrowserThing restores capacity; your application decides whether to retry

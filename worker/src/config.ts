@@ -15,6 +15,7 @@ export interface WorkerConfig {
     browser: {
         type: 'chromium' | 'firefox' | 'webkit';
         headless: boolean;
+        args: string[];
     };
     gateway: {
         port: number;
@@ -31,6 +32,40 @@ export interface WorkerConfig {
     };
 }
 
+const sandboxFlags = new Set([
+    'no-sandbox',
+    'disable-setuid-sandbox',
+    'disable-namespace-sandbox',
+    'disable-seccomp-filter-sandbox',
+    'disable-gpu-sandbox',
+]);
+
+const browserArgs = z.string().optional().transform((value, context) => {
+    if (!value) {
+        return [];
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        context.addIssue({ code: 'custom', message: 'BROWSER_ARGS must be a JSON array of strings' });
+        return z.NEVER;
+    }
+    if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string')) {
+        context.addIssue({ code: 'custom', message: 'BROWSER_ARGS must be a JSON array of strings' });
+        return z.NEVER;
+    }
+    const refused = parsed.filter(arg => sandboxFlags.has(arg.replace(/^-+/, '').split('=')[0]!));
+    if (refused.length > 0) {
+        context.addIssue({
+            code: 'custom',
+            message: `BROWSER_ARGS must not turn off the browser sandbox: ${refused.join(', ')}`,
+        });
+        return z.NEVER;
+    }
+    return parsed;
+});
+
 const schema = z.object({
     SERVER_URL: z.url({ protocol: /^https?$/, message: 'SERVER_URL must be an http(s) URL' }),
     WORKER_API_KEY: z.string().transform(value => value || undefined).optional(),
@@ -39,6 +74,7 @@ const schema = z.object({
     PRIVATE_HOSTNAME: z.string().min(1).optional(),
     MAX_SLOTS: z.coerce.number().int().min(1).max(1024).default(5),
     HEADLESS: z.enum(['true', 'false']).default('true').transform(value => value === 'true'),
+    BROWSER_ARGS: browserArgs,
     HEARTBEAT_INTERVAL: z.coerce.number().int().min(1).default(5),
     DRAIN_TIMEOUT: z.coerce.number().int().min(0).default(300),
     LOG_LEVEL: z.enum(logLevels).default('info'),
@@ -57,6 +93,7 @@ export function parseConfig(environment: NodeJS.ProcessEnv): WorkerConfig {
         browser: {
             type: parsed.BROWSER_TYPE,
             headless: parsed.HEADLESS,
+            args: parsed.BROWSER_ARGS,
         },
         gateway: {
             port: parsed.PORT,
