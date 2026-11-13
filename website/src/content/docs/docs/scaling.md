@@ -74,6 +74,8 @@ spend more time waiting for pages can use more slots, provided memory permits.
 
 Increase capacity in steps. Measure latency, throughput, and memory with your
 own workload. Adding more workers on a fully used host does not add CPU capacity.
+Each worker runs its own browser, so very small workers lose throughput. For the
+same CPU budget, use fewer, larger workers instead of many tiny ones.
 The repository includes [benchmark scripts](https://github.com/mbroton/browserthing/tree/v{{release}}/scripts/bench).
 See [benchmark results](/browserthing/docs/benchmarks/) for a comparison of
 BrowserThing and Browserless on the same hardware.
