@@ -36,14 +36,15 @@ the volume. The `-v` option deletes volumes and their data.
 
 ## Create an API key
 
-With the server still bound to localhost, create the first key:
+The server refuses requests until an API key exists. Until then, the worker
+exits with a `401` error and Docker restarts it. With the server still bound
+to localhost, create the first key:
 
 ```sh
 docker compose exec server server apikey create --name grid
 ```
 
-Save the returned key. Creating it immediately enables authentication across
-the service. Set the worker key in `.env`:
+Save the returned key. Set the worker key in `.env`:
 
 ```dotenv
 WORKER_API_KEY=pwd_replace_with_your_key
@@ -81,7 +82,7 @@ network or another route to the server.
 
 - `GET /healthz` checks process health.
 - `GET /readyz` checks database readiness.
-- `GET /v1/capacity` reports browser slots and queue depth; it needs a key after authentication is enabled.
+- `GET /v1/capacity` reports browser slots and queue depth; it needs a key.
 
 Keep the Compose stop grace period longer than the application's shutdown
 window. The supplied file uses 60 seconds and sets worker `DRAIN_TIMEOUT=30`.

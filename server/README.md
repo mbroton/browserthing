@@ -123,10 +123,12 @@ server apikey revoke --id <uuid>
 All valid API keys have equal trust. Any valid key can read or delete any
 session. Per-key session scope is planned for a later phase.
 
-## Authentication bootstrap mode
+## Authentication
 
-**A server with zero active API keys serves the entire control plane without
-authentication.** Create the first API key to lock the running server and
-require a bearer token for all control-plane routes. The server stays locked
-for its process lifetime, even if you later revoke every key. Restart the
-server to enter bootstrap mode again when the database has zero active keys.
+Every route except `/healthz` and `/readyz` requires a bearer token. A server
+with zero active API keys refuses these requests with `401` and logs how to
+create a key at startup.
+
+Set `AUTH_DISABLED=true` to turn off authentication for local development.
+Every client that can reach the server then has full access, and the server
+logs a warning at startup.

@@ -45,7 +45,7 @@ have separate browser contexts, but share the worker's browser process.
 
 ## A connection
 
-1. The server checks the client's key, if authentication is enabled.
+1. The server checks the client's API key.
 2. It claims capacity on a matching worker and creates a session record.
 3. It connects to the worker and starts the WebSocket relay.
 4. The client creates contexts and pages through Playwright.

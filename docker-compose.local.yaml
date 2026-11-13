@@ -16,8 +16,9 @@ services:
       context: ./server
       dockerfile: Dockerfile
     environment:
-      # Local Compose uses unauthenticated bootstrap mode. Do not use it on a public network.
+      # Local Compose runs without authentication. Do not use it on a public network.
       - DATABASE_URL=postgres://pwd:pwd@postgres:5432/pwd?sslmode=disable
+      - AUTH_DISABLED=true
     ports:
       - "127.0.0.1:8080:8080"
     # Must exceed the server's shutdown sequence (~44s with the default

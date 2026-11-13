@@ -41,9 +41,9 @@ clients ──► server + postgres (host A) ──┬──► worker, worker  
 
 **1. Open the server to the network.** The quick-start compose file binds the
 server to `127.0.0.1:8080`. Workers on other hosts need it reachable, so
-change the mapping to `"8080:8080"` (or put it behind your own proxy) and
-create an API key — an open bootstrap-mode server on a network is not
-something you want:
+change the mapping to `"8080:8080"` (or put it behind your own proxy). The
+server refuses requests until an API key exists, so create one if you have
+not yet:
 
 ```bash
 docker compose exec server server apikey create --name grid

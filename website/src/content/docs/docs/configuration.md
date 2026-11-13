@@ -14,6 +14,7 @@ Server duration values use Go duration notation, such as `10s` or `5m`.
 | --- | --- | --- |
 | `DATABASE_URL` | Required | PostgreSQL connection string. |
 | `LISTEN_ADDR` | `:8080` | HTTP and WebSocket listen address. |
+| `AUTH_DISABLED` | `false` | `true` turns off API-key checks, so every client that can reach the server has full access. Use it only for local development. |
 | `DEFAULT_BROWSER_TYPE` | `chromium` | Browser selected when a connection omits `?browser=`. |
 | `MAX_QUEUE_SIZE` | `100` | Maximum waiting requests per server replica. `0` disables queueing. |
 | `QUEUE_WAIT_TIMEOUT` | `30s` | Maximum wait for a worker slot. |
@@ -59,7 +60,7 @@ Worker time values are integer **seconds**.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `SERVER_URL` | Required | Server HTTP or HTTPS URL. |
-| `WORKER_API_KEY` | Unset | Bearer key for server requests. Required after authentication is enabled. |
+| `WORKER_API_KEY` | Unset | Bearer key for server requests. Required unless the server sets `AUTH_DISABLED=true`. |
 | `BROWSER_TYPE` | `chromium` | One of `chromium`, `firefox`, or `webkit`. |
 | `PORT` | `3131` | Port for browser relay connections. |
 | `PRIVATE_HOSTNAME` | Machine hostname | Address advertised to the server. It must be reachable from the server. |

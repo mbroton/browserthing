@@ -4,9 +4,8 @@ description: Inspect capacity and workers, create sessions, and attach Playwrigh
 ---
 
 BrowserThing provides a REST control plane and WebSocket connections for
-Playwright. The examples use a local server. Add
-`-H "Authorization: Bearer $BROWSERTHING_API_KEY"` to REST requests after you
-enable authentication.
+Playwright. The examples use a local server and read the API key from
+`BROWSERTHING_API_KEY`.
 
 The full request and response schemas are in the
 [v{{release}} OpenAPI document](https://github.com/mbroton/browserthing/blob/v{{release}}/server/openapi.yaml).
@@ -22,8 +21,8 @@ WebSocket routes are documented separately below.
 | `GET /readyz` | Check database readiness without authentication. |
 
 ```sh
-curl -fsS http://localhost:8080/v1/capacity
-curl -fsS http://localhost:8080/v1/workers
+curl -fsS -H "Authorization: Bearer $BROWSERTHING_API_KEY" http://localhost:8080/v1/capacity
+curl -fsS -H "Authorization: Bearer $BROWSERTHING_API_KEY" http://localhost:8080/v1/workers
 ```
 
 For one idle Chromium worker with five slots, `GET /v1/capacity` returns
@@ -61,6 +60,7 @@ Playwright version so the server can select a matching worker:
 
 ```sh
 curl -fsS http://localhost:8080/v1/sessions \
+  -H "Authorization: Bearer $BROWSERTHING_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"browser":"chromium","playwright_version":"{{playwright}}"}'
 ```
@@ -89,7 +89,7 @@ npm install playwright@{{playwright}}
 ```
 
 Save this as `create-session.mjs`. Set `BROWSERTHING_URL` for a remote server and
-`BROWSERTHING_API_KEY` if authentication is enabled. The key is used for both the
+`BROWSERTHING_API_KEY` to your API key. The key is used for both the
 REST request and the WebSocket connection.
 
 ```js
@@ -138,8 +138,8 @@ match the session's worker.
 | `DELETE /v1/sessions/{id}` | Complete a pending or running session. |
 
 ```sh
-curl -fsS http://localhost:8080/v1/sessions/SESSION_ID
-curl -fsS -X DELETE http://localhost:8080/v1/sessions/SESSION_ID
+curl -fsS -H "Authorization: Bearer $BROWSERTHING_API_KEY" http://localhost:8080/v1/sessions/SESSION_ID
+curl -fsS -X DELETE -H "Authorization: Bearer $BROWSERTHING_API_KEY" http://localhost:8080/v1/sessions/SESSION_ID
 ```
 
 `GET` returns `200 OK` with the session object. A successful `DELETE` returns

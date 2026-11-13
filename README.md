@@ -45,11 +45,16 @@ For existing installations, see [upgrading after the rename](#upgrading-after-th
 
 You need Docker with the Compose plugin, `curl`, and Node.js 20 or later.
 
-**1. Start the service** — the server, PostgreSQL, and one Chromium worker:
+**1. Start the service** — the server, PostgreSQL, and one Chromium worker.
+The server refuses requests until an API key exists, so create one and give it
+to the worker:
 
 ```bash
 curl -LO https://raw.githubusercontent.com/mbroton/browserthing/main/docker-compose.yaml
 curl --create-dirs -o worker/seccomp_profile.json https://raw.githubusercontent.com/mbroton/browserthing/main/worker/seccomp_profile.json
+docker compose up -d --wait server
+export BROWSERTHING_API_KEY=$(docker compose exec -T server server apikey create --name quickstart)
+echo "WORKER_API_KEY=$BROWSERTHING_API_KEY" >> .env
 docker compose up -d
 ```
 
@@ -66,7 +71,9 @@ a screenshot. Replace the task with the browser actions your application needs:
 ```js
 import { chromium } from 'playwright';
 
-const browser = await chromium.connect('ws://localhost:8080');
+const browser = await chromium.connect('ws://localhost:8080', {
+  headers: { Authorization: `Bearer ${process.env.BROWSERTHING_API_KEY}` },
+});
 try {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -77,7 +84,7 @@ try {
 }
 ```
 
-Run the example:
+Run the example in the same shell, which has `BROWSERTHING_API_KEY` set:
 
 ```bash
 node browser-task.mjs
@@ -208,12 +215,12 @@ Kubernetes):
 - **Networking**: workers → server (HTTP: register, heartbeat), server →
   workers (WebSocket dial), server → PostgreSQL.
 - **Exposure**: keep PostgreSQL and workers private; expose only the server.
-- **Authentication**: a server with zero API keys runs in open bootstrap
-  mode. Create the first key
-  (`docker compose exec server server apikey create --name <name>`) and from
-  then on every request except health checks needs a key; hand it to every
-  worker (`WORKER_API_KEY`) and client
-  (`chromium.connect('ws://host:8080/?token=pwd_...')`) in the same step.
+- **Authentication**: every request except health checks needs an API key.
+  A server with zero keys refuses requests and logs how to create one
+  (`docker compose exec server server apikey create --name <name>`). Give a
+  key to every worker (`WORKER_API_KEY`) and client
+  (`chromium.connect('ws://host:8080/?token=pwd_...')`). `AUTH_DISABLED=true`
+  turns authentication off for local development only.
 - **Scaling**: add or remove worker containers freely; each registers itself
   and starts serving. Workers can run on other machines — see
   [scaling beyond one machine](worker/README.md#scaling-beyond-one-machine).
@@ -243,8 +250,7 @@ versions must still match as described in the quick start.
 ### Security boundary
 
 BrowserThing is built for applications you trust. It trusts every authenticated
-client (in bootstrap mode: every client that can reach the server) while letting
-browsers visit untrusted pages. The
+client while letting browsers visit untrusted pages. The
 compose files bind the server to `127.0.0.1`, keep PostgreSQL and workers on
 an internal network, and run workers as a non-root user with Playwright's
 Chromium sandbox profile.
@@ -263,10 +269,14 @@ dedicated VMs where that boundary is required. See
 ```python
 from playwright.async_api import async_playwright
 import asyncio
+import os
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.connect('ws://localhost:8080')
+        browser = await p.chromium.connect(
+            'ws://localhost:8080',
+            headers={'Authorization': f"Bearer {os.environ['BROWSERTHING_API_KEY']}"},
+        )
         try:
             context = await browser.new_context()
             page = await context.new_page()
@@ -284,17 +294,18 @@ Create a session through the API to get an ID you can inspect, connect to,
 and terminate:
 
 ```bash
-curl -s localhost:8080/v1/capacity               # slots and queue depth
-curl -s localhost:8080/v1/workers                # the whole grid
+AUTH="Authorization: Bearer $BROWSERTHING_API_KEY"
+curl -s -H "$AUTH" localhost:8080/v1/capacity               # slots and queue depth
+curl -s -H "$AUTH" localhost:8080/v1/workers                # the whole grid
 
 # Create a session, then connect to it by ID:
-curl -s -X POST localhost:8080/v1/sessions \
+curl -s -H "$AUTH" -X POST localhost:8080/v1/sessions \
   -H 'Content-Type: application/json' \
   -d '{"browser": "chromium", "playwright_version": "1.65.0"}'
-# -> { "id": "..." }  connect: chromium.connect('ws://localhost:8080/sessions/<id>')
+# -> { "id": "..." }  connect to ws://localhost:8080/sessions/<id> with the same key
 
-curl -s localhost:8080/v1/sessions/<id>          # inspect it
-curl -X DELETE localhost:8080/v1/sessions/<id>   # terminate it, even mid-use
+curl -s -H "$AUTH" localhost:8080/v1/sessions/<id>          # inspect it
+curl -s -H "$AUTH" -X DELETE localhost:8080/v1/sessions/<id>   # terminate it, even mid-use
 ```
 
 ## Contributing

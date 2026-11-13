@@ -1,7 +1,7 @@
 # Benchmark stack: postgres + server + N identical chromium workers.
 # Scale the worker count per run (from scripts/bench/):
 #   docker compose up -d --build --scale worker=3
-# The server runs in unauthenticated bootstrap mode (zero API keys), like
+# The server runs without authentication (AUTH_DISABLED=true), like
 # docker-compose.local.yaml. Do not use it on a public network.
 services:
   postgres:
@@ -22,6 +22,7 @@ services:
       dockerfile: Dockerfile
     environment:
       - DATABASE_URL=postgres://pwd:pwd@postgres:5432/pwd?sslmode=disable
+      - AUTH_DISABLED=true
       # Recycling disabled: the benchmark measures the grid's service rate,
       # not browser restart latency.
       - MAX_LIFETIME_SESSIONS=0

@@ -295,6 +295,19 @@ func TestRelay_HTTPPreflightAndAuth(t *testing.T) {
 		_ = receiveClose(t, worker, session.ID)
 	})
 
+	t.Run("no active keys", func(t *testing.T) {
+		truncateTables(t, pool)
+		worker := newEchoWorker(t)
+		insertRelayWorker(t, queries, worker.wsURL(), "chromium", "1.62.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServer(t, pool, NewTokenAuthenticator(queries, logger), manager, logger, 0)
+		_, response, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err == nil || response == nil || response.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("dial with no active keys response = %v, error = %v; want 401", response, err)
+		}
+	})
+
 	t.Run("no-auth mode", func(t *testing.T) {
 		truncateTables(t, pool)
 		worker := newEchoWorker(t)

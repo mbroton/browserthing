@@ -4,9 +4,8 @@ description: Understand BrowserThing authentication, browser isolation, and netw
 ---
 
 BrowserThing is built for applications you trust. It trusts authenticated clients.
-In bootstrap mode, it trusts every client that can reach the server. Browsers can
-visit untrusted pages, but the service is not a security boundary between hostile
-clients.
+Browsers can visit untrusted pages, but the service is not a security boundary
+between hostile clients.
 
 ## Session isolation
 
@@ -30,13 +29,19 @@ to the workers for these requests, including access to internal services.
 
 ## Authentication
 
-A server with zero active API keys starts in open bootstrap mode. Create the
-first key to enable authentication. Every valid key has equal access, including
-the ability to inspect or delete other sessions.
+Every request except `/healthz` and `/readyz` needs a valid API key. A server
+with zero active keys refuses all other requests with `401` and logs how to
+create a key. Every valid key has equal access, including the ability to
+inspect or delete other sessions. Create the replacement key before you revoke
+your last usable key.
 
-Once locked, the running server stays locked even if you revoke all keys. If
-you restart it with zero active keys in the database, it returns to bootstrap
-mode. Plan key rotation before you revoke your last usable key.
+Workers must reach the server, so a page that a worker renders can also reach
+it. Authentication keeps such a page out of the server's API.
+
+`AUTH_DISABLED=true` turns off key checks and gives every client that can
+reach the server full access. The server logs a warning at startup when it is
+on. Use it only for local development, as the repository's local Compose file
+does.
 
 ## Transport and network access
 

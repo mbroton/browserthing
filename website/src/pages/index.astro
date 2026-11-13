@@ -17,7 +17,9 @@ const minor = release.playwright.split('.').slice(0, 2).join('.');
 
 const node = `import { chromium } from 'playwright';
 
-const browser = await chromium.connect('ws://localhost:8080');
+const browser = await chromium.connect('ws://localhost:8080', {
+  headers: { Authorization: \`Bearer \${process.env.BROWSERTHING_API_KEY}\` },
+});
 try {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -27,10 +29,15 @@ try {
   await browser.close();
 }`;
 
-const python = `from playwright.sync_api import sync_playwright
+const python = `import os
+
+from playwright.sync_api import sync_playwright
 
 with sync_playwright() as p:
-    browser = p.chromium.connect("ws://localhost:8080")
+    browser = p.chromium.connect(
+        "ws://localhost:8080",
+        headers={"Authorization": f"Bearer {os.environ['BROWSERTHING_API_KEY']}"},
+    )
     try:
         context = browser.new_context()
         page = context.new_page()
@@ -46,7 +53,13 @@ const steps = [
 curl -fsSL --create-dirs -o worker/seccomp_profile.json \\
   https://raw.githubusercontent.com/mbroton/browserthing/v${release.release}/worker/seccomp_profile.json`,
   },
-  { title: 'Start the server, PostgreSQL, and a Chromium worker', code: 'docker compose up -d' },
+  {
+    title: 'Start the server, PostgreSQL, and a Chromium worker',
+    code: `docker compose up -d --wait server
+export BROWSERTHING_API_KEY=$(docker compose exec -T server server apikey create --name quickstart)
+echo "WORKER_API_KEY=$BROWSERTHING_API_KEY" >> .env
+docker compose up -d`,
+  },
   { title: 'Install the matching Playwright client', code: `npm install playwright@${release.playwright}` },
 ];
 
@@ -74,7 +87,7 @@ const features = [
   { icon: 'random', title: 'Browser recycling', text: 'After 50 sessions by default, a worker stops new sessions, lets active ones finish, and starts a new browser.' },
   { icon: 'clock', title: 'Admission queue', text: 'When every matching slot is busy, new connections can wait for a free slot instead of failing.' },
   { icon: 'analytics', title: 'Capacity API', text: 'A REST API shows workers, sessions, and free capacity, so you can see the pool and plan for it.' },
-  { icon: 'padlock', title: 'API keys', text: 'Turn on API keys when other machines connect. Keys are stored as hashes in PostgreSQL.' },
+  { icon: 'padlock', title: 'API keys', text: 'Every client and worker uses an API key. Keys are stored as hashes in PostgreSQL.' },
 ] as const;
 ---
 <!doctype html>

@@ -29,10 +29,15 @@ PostgreSQL, the server, and one Chromium worker with five session slots.
 
 ## 2. Start the service
 
+The server refuses requests until an API key exists. Start it, create a key,
+and give the key to the worker:
+
 ```sh
+docker compose up -d --wait server
+export BROWSERTHING_API_KEY=$(docker compose exec -T server server apikey create --name quickstart)
+echo "WORKER_API_KEY=$BROWSERTHING_API_KEY" >> .env
 docker compose up -d
-docker compose ps
-curl -fsS http://localhost:8080/v1/capacity
+curl -fsS -H "Authorization: Bearer $BROWSERTHING_API_KEY" http://localhost:8080/v1/capacity
 ```
 
 The first start downloads the images. If the capacity request fails or shows no
@@ -41,7 +46,7 @@ does not register.
 
 :::note[Local setup]
 The server listens on `127.0.0.1:8080`. This example uses the Compose file's local
-database password and starts without API keys. Follow the
+database password and one key for the worker and the client. Follow the
 [deployment guide](/browserthing/docs/deployment/) before you expose the service to other machines.
 :::
 
@@ -60,7 +65,9 @@ with the browser actions your application needs:
 ```js
 import { chromium } from 'playwright';
 
-const browser = await chromium.connect('ws://localhost:8080');
+const browser = await chromium.connect('ws://localhost:8080', {
+  headers: { Authorization: `Bearer ${process.env.BROWSERTHING_API_KEY}` },
+});
 try {
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -71,7 +78,7 @@ try {
 }
 ```
 
-Run it:
+Run it in the same shell, which has `BROWSERTHING_API_KEY` set:
 
 ```sh
 node preview.mjs

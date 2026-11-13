@@ -89,7 +89,10 @@ func run(ctx context.Context, args []string, stdout io.Writer, logger *slog.Logg
 	if address == "" {
 		address = defaultListenAddress
 	}
-	authenticator := httpapi.NewTokenAuthenticator(queries, logger)
+	authenticator, err := httpapi.NewAuthenticator(ctx, runtimeConfig.AuthDisabled, queries, logger)
+	if err != nil {
+		return err
+	}
 	servicesCtx, stopServices := context.WithCancel(ctx)
 	defer stopServices()
 	sessionScheduler := scheduler.New(servicesCtx, pool, logger, scheduler.Options{
