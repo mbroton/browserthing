@@ -46,6 +46,7 @@ type Options struct {
 	PongTimeout       time.Duration
 	HeartbeatInterval time.Duration
 	ShutdownGrace     time.Duration
+	MaxDuration       time.Duration
 }
 
 type Manager struct {
@@ -151,6 +152,9 @@ func (m *Manager) Run(reservation *AttachReservation, client, worker *websocket.
 	start(func() relayEvent { return copyMessages(worker, client, m.options) })
 	start(func() relayEvent { return pingPeers(ctx, client, worker, m.options) })
 	start(func() relayEvent { return m.renewHeartbeat(ctx, sessionID) })
+	if m.options.MaxDuration > 0 {
+		start(func() relayEvent { return limitDuration(ctx, m.options.MaxDuration) })
+	}
 
 	event := <-events
 	cancel()
@@ -248,6 +252,21 @@ func (m *Manager) renewHeartbeat(ctx context.Context, sessionID uuid.UUID) relay
 			default:
 				m.logger.Warn("renew session heartbeat", "session_id", sessionID, "error", err)
 			}
+		}
+	}
+}
+
+func limitDuration(ctx context.Context, limit time.Duration) relayEvent {
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return relayEvent{err: ctx.Err()}
+	case <-timer.C:
+		return relayEvent{
+			code:   websocket.ClosePolicyViolation,
+			reason: fmt.Sprintf("session exceeded MAX_SESSION_DURATION (%s)", limit),
+			normal: true,
 		}
 	}
 }

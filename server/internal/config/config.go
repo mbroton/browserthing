@@ -22,6 +22,7 @@ type Config struct {
 	RelayPingInterval        time.Duration
 	RelayPongTimeout         time.Duration
 	ShutdownGracePeriod      time.Duration
+	MaxSessionDuration       time.Duration
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -91,6 +92,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	maxSessionDuration, err := nonNegativeDuration(getenv, "MAX_SESSION_DURATION", 0)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		WorkerHeartbeatTTL:       workerTTL,
@@ -108,6 +113,7 @@ func Load(getenv func(string) string) (Config, error) {
 		RelayPingInterval:        relayPingInterval,
 		RelayPongTimeout:         relayPongTimeout,
 		ShutdownGracePeriod:      shutdownGracePeriod,
+		MaxSessionDuration:       maxSessionDuration,
 	}, nil
 }
 
@@ -138,6 +144,21 @@ func positiveDuration(getenv func(string) string, name string, defaultValue time
 	}
 	if value.Microseconds() == 0 {
 		return 0, fmt.Errorf("%s must be at least one microsecond", name)
+	}
+	return value, nil
+}
+
+func nonNegativeDuration(getenv func(string) string, name string, defaultValue time.Duration) (time.Duration, error) {
+	raw := getenv(name)
+	if raw == "" {
+		return defaultValue, nil
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a duration: %w", name, err)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("%s must not be negative", name)
 	}
 	return value, nil
 }

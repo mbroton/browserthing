@@ -146,6 +146,8 @@ and shared logs. Every valid key has full access to the service. See
 Create your own browser context after you connect. Close the browser connection
 in a `finally` block so the worker can release the session slot.
 
-A session ends when its connection closes. Reconnecting to a completed session
-is not supported. The [API guide](/browserthing/docs/api/) explains how to create a
-pending session and attach to it by ID.
+A session ends when its connection closes. If the server sets
+`MAX_SESSION_DURATION`, it also closes sessions that stay connected for longer
+than that limit. Reconnecting to a completed session is not supported. The
+[API guide](/browserthing/docs/api/) explains how to create a pending session
+and attach to it by ID.

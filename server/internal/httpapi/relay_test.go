@@ -1235,6 +1235,79 @@ func TestRelay_LivenessBlockedPeerAndShutdown(t *testing.T) {
 	})
 }
 
+func TestRelay_MaxSessionDuration(t *testing.T) {
+	pool := newMigratedTestPool(t)
+	queries := data.New(pool)
+
+	t.Run("session past the limit is closed and frees its slot", func(t *testing.T) {
+		truncateTables(t, pool)
+		worker := newEchoWorker(t)
+		insertRelayWorker(t, queries, worker.wsURL(), "chromium", "1.62.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{MaxDuration: 300 * time.Millisecond})
+		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 0)
+		client, _, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil {
+			t.Fatalf("limited relay dial returned an error: %v", err)
+		}
+		defer client.Close()
+		assertMessage(t, client, []byte("worker-ready"))
+		session := latestSession(t, pool, queries)
+
+		_, response, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err == nil || response == nil || response.StatusCode != http.StatusTooManyRequests {
+			t.Fatalf("dial while slot is held: response = %v, error = %v; want 429", response, err)
+		}
+		_ = response.Body.Close()
+
+		closeErr := readClose(t, client)
+		wantReason := "session exceeded MAX_SESSION_DURATION (300ms)"
+		if closeErr.Code != websocket.ClosePolicyViolation || closeErr.Text != wantReason {
+			t.Fatalf("client close = %d %q, want 1008 %q", closeErr.Code, closeErr.Text, wantReason)
+		}
+		workerClose := receiveClose(t, worker, session.ID)
+		if workerClose.Code != websocket.ClosePolicyViolation || workerClose.Text != wantReason {
+			t.Fatalf("worker close = %d %q, want 1008 %q", workerClose.Code, workerClose.Text, wantReason)
+		}
+		waitForSession(t, queries, session.ID, func(current data.Session) bool {
+			return current.Status == data.SessionStatusCompleted
+		})
+
+		next, _, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil {
+			t.Fatalf("dial after limit close returned an error: %v", err)
+		}
+		defer next.Close()
+		assertMessage(t, next, []byte("worker-ready"))
+	})
+
+	t.Run("zero limit keeps session open", func(t *testing.T) {
+		truncateTables(t, pool)
+		worker := newEchoWorker(t)
+		insertRelayWorker(t, queries, worker.wsURL(), "chromium", "1.62.1", 1)
+		logger := testLogger(io.Discard)
+		manager := newTestRelayManager(queries, logger, relay.Options{})
+		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 0)
+		client, _, err := websocket.DefaultDialer.Dial(wsURL(server.URL)+"/", nil)
+		if err != nil {
+			t.Fatalf("unlimited relay dial returned an error: %v", err)
+		}
+		defer client.Close()
+		assertMessage(t, client, []byte("worker-ready"))
+		time.Sleep(500 * time.Millisecond)
+		if err := client.WriteMessage(websocket.TextMessage, []byte("still-open")); err != nil {
+			t.Fatalf("writing after wait: %v", err)
+		}
+		assertMessage(t, client, []byte("still-open"))
+		session := latestSession(t, pool, queries)
+		if session.Status != data.SessionStatusRunning {
+			t.Fatalf("unlimited session status = %q, want running", session.Status)
+		}
+		closeWebSocket(t, client, websocket.CloseNormalClosure, "done")
+		_ = receiveClose(t, worker, session.ID)
+	})
+}
+
 func TestRelay_CloseCodeForwardingAndBlockedWrite(t *testing.T) {
 	pool := newMigratedTestPool(t)
 	queries := data.New(pool)
@@ -1649,6 +1722,7 @@ func newTestRelayManager(
 	if overrides.ShutdownGrace > 0 {
 		options.ShutdownGrace = overrides.ShutdownGrace
 	}
+	options.MaxDuration = overrides.MaxDuration
 	return relay.NewManager(queries, logger, options)
 }
 
