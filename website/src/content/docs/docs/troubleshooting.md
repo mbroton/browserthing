@@ -76,9 +76,9 @@ registered workers: chromium 1.64.1`. Admission waits up to
 Sessions on one worker share a browser process. A browser crash ends those
 sessions. Recycling also closes remaining sessions when `DRAIN_TIMEOUT` expires.
 A server restart ends connections on that relay. Sessions that start together
-also end together when they reach `MAX_SESSION_DURATION`. Check logs before you retry
-work, especially if the automation changes data on other sites. A new connection
-starts a new session; it does not resume the earlier task.
+also end together when they reach `MAX_SESSION_DURATION`. Check logs before
+you retry work, especially if the automation changes data on other sites. A new
+connection starts a new session; it does not resume the earlier task.
 
 ## Calls fail with "session exceeded MAX_SESSION_DURATION"
 
