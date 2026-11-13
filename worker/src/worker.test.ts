@@ -737,6 +737,54 @@ test('a recycle 409 exits cleanly without registering again', async () => {
     assert.equal(worker.state, 'shutting_down');
 });
 
+test('a signal during a recycle drains open sessions before the worker exits', async () => {
+    let releaseRecycle!: () => void;
+    const recycleGate = new Promise<void>(resolve => {
+        releaseRecycle = resolve;
+    });
+    let recycleStarted = false;
+    const statuses: string[] = [];
+    const controlPlane: ControlPlaneLike = {
+        register: async () => ({ id: 'worker-1' }),
+        recycle: async workerId => {
+            recycleStarted = true;
+            await recycleGate;
+            return { id: workerId };
+        },
+        heartbeat: async () => ({ status: 'available', stale_session_ids: [] }),
+        setStatus: async (_workerId, status) => {
+            statuses.push(status);
+        },
+    };
+    const gateway = new FakeGateway([activeId]);
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 5_000);
+    await worker.start();
+    let exited = false;
+    void worker.waitForExit().then(() => {
+        exited = true;
+    });
+
+    const recyclePromise = worker.requestDrain('control plane');
+    await waitFor(() => recycleStarted);
+    gateway.addSession(secondId);
+    await worker.requestDrain('SIGTERM', true);
+
+    assert.equal(worker.state, 'draining');
+    assert.deepEqual(statuses, ['draining']);
+    releaseRecycle();
+    await recyclePromise;
+    assert.equal(worker.state, 'draining');
+    assert.deepEqual(statuses, ['draining', 'draining']);
+    assert.equal(exited, false);
+    assert.deepEqual(gateway.closedSessions, []);
+
+    gateway.closeSession(activeId);
+    gateway.closeSession(secondId);
+    assert.equal(await bounded(worker.waitForExit(), 500), 0);
+    assert.equal(browsers.every(browser => browser.closed), true);
+});
+
 test('a worker reports recycling during the swap and a drain request then shuts it down', async () => {
     let releaseRecycle!: () => void;
     const recycleGate = new Promise<void>(resolve => {

@@ -200,7 +200,7 @@ export class BrowserWorker {
             await this.shutdown(0);
             return;
         }
-        if (this.currentState === 'starting' || this.currentState === 'recycling') {
+        if (this.currentState === 'starting') {
             await this.shutdown(0);
             return;
         }
@@ -306,6 +306,10 @@ export class BrowserWorker {
             // already-bumped generation, so only a bump at completion makes
             // their late responses distinguishable from post-swap ones.
             this.recycleGeneration += 1;
+            if (this.state === 'draining') {
+                await this.bestEffortStatus('draining');
+                return;
+            }
             this.currentState = 'running';
             this.logger.info(
                 keepBrowser ? 'Worker renewed its session budget' : 'Worker recycled with a fresh browser',
