@@ -6,14 +6,17 @@ import WebSocket, { WebSocketServer, type RawData } from 'ws';
 interface SessionSockets {
     client: WebSocket;
     upstream: WebSocket;
+    endpoint: string;
 }
 
 interface PendingSession {
     clientSocket: Duplex;
     upstream: WebSocket;
+    endpoint: string;
 }
 
 interface GatewayEvents {
+    sessionOpen: [sessionId: string];
     sessionClose: [sessionId: string];
 }
 
@@ -33,6 +36,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
     private readonly webSocketServer = new WebSocketServer({ noServer: true });
     private readonly sessions = new Map<string, SessionSockets>();
     private readonly pendingSessions = new Map<string, PendingSession>();
+    private readonly idleWaiters: Array<{ endpoint: string; resolve: () => void }> = [];
     private shuttingDown = false;
     private shutdownPromise: Promise<void> | null = null;
     private listenPort: number | null = null;
@@ -52,6 +56,22 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
     // the fresh endpoint, established sessions keep their upstream sockets.
     setBrowserEndpoint(endpoint: string): void {
         this.browserEndpoint = endpoint;
+    }
+
+    /** Resolves when no open or connecting session uses the browser endpoint. */
+    whenEndpointIdle(endpoint: string): Promise<void> {
+        if (!this.usesEndpoint(endpoint)) {
+            return Promise.resolve();
+        }
+        return new Promise(resolve => this.idleWaiters.push({ endpoint, resolve }));
+    }
+
+    closeEndpointSessions(endpoint: string, code: number, reason: string): void {
+        for (const [sessionId, session] of this.sessions) {
+            if (session.endpoint === endpoint) {
+                this.closeSession(sessionId, code, reason, session);
+            }
+        }
     }
 
     get activeSessionIds(): string[] {
@@ -122,6 +142,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
                 rejectUpgrade(session.clientSocket, 503, 'Worker is shutting down');
             }
         }
+        this.releaseIdleWaiters();
 
         const closed = Promise.all([
             closeWebSocketServer(this.webSocketServer),
@@ -153,11 +174,12 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             return;
         }
 
+        const endpoint = this.browserEndpoint;
         let upstream: WebSocket;
         try {
             // Node validates forwarded header values synchronously inside the
             // WebSocket constructor; a throw here must not reach uncaughtException.
-            upstream = new WebSocket(this.browserEndpoint, {
+            upstream = new WebSocket(endpoint, {
                 headers: forwardedHeaders(request.headers),
                 handshakeTimeout: upstreamHandshakeTimeoutMs,
             });
@@ -173,7 +195,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
                 this.closeSession(sessionId, 1011, 'browser connection failed', acceptedSession);
             }
         });
-        this.pendingSessions.set(sessionId, { clientSocket: socket, upstream });
+        this.pendingSessions.set(sessionId, { clientSocket: socket, upstream, endpoint });
 
         const clearPending = (): boolean => {
             if (this.pendingSessions.get(sessionId)?.upstream !== upstream) {
@@ -182,6 +204,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             this.pendingSessions.delete(sessionId);
             socket.off('close', abortDial);
             upstream.off('open', acceptClient);
+            this.releaseIdleWaiters();
             return true;
         };
         const abortDial = () => {
@@ -209,7 +232,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             }
             try {
                 this.webSocketServer.handleUpgrade(request, socket, head, client => {
-                    const session = { client, upstream };
+                    const session = { client, upstream, endpoint };
                     acceptedSession = session;
                     client.once('error', () => this.closeSession(
                         sessionId,
@@ -220,6 +243,7 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
                     this.sessions.set(sessionId, session);
                     this.pipeSession(sessionId, session);
                     clearPending();
+                    this.emit('sessionOpen', sessionId);
                 });
             } catch {
                 rejectClient(400, 'Invalid WebSocket upgrade');
@@ -260,7 +284,32 @@ export class SessionGateway extends EventEmitter<GatewayEvents> {
             return;
         }
         this.sessions.delete(sessionId);
+        this.releaseIdleWaiters();
         this.emit('sessionClose', sessionId);
+    }
+
+    private usesEndpoint(endpoint: string): boolean {
+        for (const session of this.sessions.values()) {
+            if (session.endpoint === endpoint) {
+                return true;
+            }
+        }
+        for (const session of this.pendingSessions.values()) {
+            if (session.endpoint === endpoint) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private releaseIdleWaiters(): void {
+        for (let index = this.idleWaiters.length - 1; index >= 0; index -= 1) {
+            const waiter = this.idleWaiters[index]!;
+            if (!this.usesEndpoint(waiter.endpoint)) {
+                this.idleWaiters.splice(index, 1);
+                waiter.resolve();
+            }
+        }
     }
 }
 

@@ -362,9 +362,6 @@ func registerWorkerRoutes(
 	}
 	type registeredWorker struct {
 		Worker
-		// Session budget for this worker (0 = unlimited). The worker drains
-		// itself once it has served this many sessions, without waiting for
-		// the heartbeat that would tell it to.
 		MaxLifetimeSessions int64 `json:"max_lifetime_sessions" doc:"Sessions this worker may serve before it must recycle; 0 means unlimited"`
 	}
 	type registerOutput struct {

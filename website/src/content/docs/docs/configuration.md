@@ -17,7 +17,7 @@ Server duration values use Go duration notation, such as `10s` or `5m`.
 | `DEFAULT_BROWSER_TYPE` | `chromium` | Browser selected when a connection omits `?browser=`. |
 | `MAX_QUEUE_SIZE` | `100` | Maximum waiting requests per server replica. `0` disables queueing. |
 | `QUEUE_WAIT_TIMEOUT` | `30s` | Maximum wait for a worker slot. |
-| `MAX_LIFETIME_SESSIONS` | `50` | Session claims before a worker drains and recycles. `0` disables recycling. |
+| `MAX_LIFETIME_SESSIONS` | `50` | Session claims before a worker recycles its browser. `0` disables recycling. |
 | `WORKER_HEARTBEAT_TTL` | `30s` | Time before an available worker with no heartbeat becomes stalled. |
 | `SESSION_HEARTBEAT_TTL` | `30s` | Time before a pending or running session with no heartbeat expires. |
 | `SESSION_HEARTBEAT_INTERVAL` | `10s` | How often a live relay renews its session. |
@@ -57,7 +57,7 @@ Worker time values are integer **seconds**.
 | `MAX_SLOTS` | `5` | Concurrent sessions per worker, from 1 to 1024. |
 | `HEADLESS` | `true` | Run the browser without a visible window. |
 | `HEARTBEAT_INTERVAL` | `5` | Interval between worker heartbeats. |
-| `DRAIN_TIMEOUT` | `300` | Maximum wait for active sessions during recycling or shutdown. Remaining sessions close when it expires. |
+| `DRAIN_TIMEOUT` | `300` | Maximum wait for open sessions on the old browser after a recycle, or during shutdown. Remaining sessions close when it expires. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, or `error`. |
 | `LOG_FORMAT` | `json` | One of `json` or `text`. |
 

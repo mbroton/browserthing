@@ -22,9 +22,11 @@ export interface GatewayLike {
     readonly listeningPort: number | null;
     start(): Promise<void>;
     setBrowserEndpoint(endpoint: string): void;
+    whenEndpointIdle(endpoint: string): Promise<void>;
+    closeEndpointSessions(endpoint: string, code: number, reason: string): void;
     closeSession(sessionId: string, code?: number, reason?: string): void;
     shutdown(): Promise<void>;
-    on(event: 'sessionClose', listener: (sessionId: string) => void): this;
+    on(event: 'sessionOpen' | 'sessionClose', listener: (sessionId: string) => void): this;
 }
 
 export interface ControlPlaneLike {
@@ -74,8 +76,9 @@ export class BrowserWorker {
     private gateway: GatewayLike | null = null;
     private heartbeatTimer: NodeJS.Timeout | null = null;
     private drainTimer: NodeJS.Timeout | null = null;
-    private recycleOnDrained = false;
     private recyclePromise: Promise<void> | null = null;
+    private retiringBrowser: BrowserServerLike | null = null;
+    private retirePromise: Promise<void> | null = null;
     private recycleGeneration = 0;
     private registerPromise: Promise<void> | null = null;
     private sessionBudget = 0;
@@ -140,25 +143,19 @@ export class BrowserWorker {
             this.attachBrowserServer(browserServer);
 
             this.gateway = this.createGateway(browserServer.wsEndpoint(), this.config.gateway.port);
-            this.gateway.on('sessionClose', () => {
+            this.gateway.on('sessionOpen', () => {
                 this.servedSessions += 1;
-                if (this.currentState === 'draining' && this.gateway?.activeConnectionCount === 0) {
-                    void this.drainCompleted();
-                    return;
-                }
-                // Drain without waiting for the heartbeat to say so: until the
-                // recycled worker becomes available, the scheduler has already
-                // stopped selecting this one, so every waiting second is dead
-                // capacity on small deployments. This counts gateway closes
-                // while the server counts claims, so a claim that never
-                // reaches the gateway leaves this counter short — the
-                // heartbeat's draining status stays as the backstop.
                 if (
                     this.currentState === 'running' &&
                     this.sessionBudget > 0 &&
                     this.servedSessions >= this.sessionBudget
                 ) {
                     void this.requestDrain('session budget spent');
+                }
+            });
+            this.gateway.on('sessionClose', () => {
+                if (this.currentState === 'draining' && this.gateway?.activeConnectionCount === 0) {
+                    void this.drainCompleted();
                 }
             });
             await this.gateway.start();
@@ -184,7 +181,17 @@ export class BrowserWorker {
         }
     }
 
+    /**
+     * A signal drain stops new sessions and exits after open sessions end.
+     * Any other drain request recycles the browser in place.
+     */
     async requestDrain(reason: string, fromSignal = false): Promise<void> {
+        if (!fromSignal) {
+            if (this.currentState === 'running') {
+                await this.recycle(reason);
+            }
+            return;
+        }
         if (this.currentState === 'shutting_down') {
             return;
         }
@@ -193,22 +200,14 @@ export class BrowserWorker {
             await this.shutdown(0);
             return;
         }
-        if (this.currentState === 'starting' || this.currentState === 'recycling') {
+        if (this.currentState === 'starting') {
             await this.shutdown(0);
             return;
         }
 
         this.currentState = 'draining';
-        // A control-plane drain means "give me a fresh browser" (the shipped
-        // compose files restart exited workers anyway). Recycling in place
-        // avoids the supervisor's crash-loop backoff, which grows into tens
-        // of seconds of downtime when sessions turn over quickly. A signal
-        // drain is a real stop request and still exits.
-        this.recycleOnDrained = !fromSignal;
-        this.logger.info('Worker is draining', { reason, recycleOnDrained: this.recycleOnDrained });
-        if (fromSignal && this.workerIdValue) {
-            await this.bestEffortStatus('draining');
-        }
+        this.logger.info('Worker is draining', { reason });
+        await this.bestEffortStatus('draining');
         if (!this.gateway || this.gateway.activeConnectionCount === 0) {
             await this.drainCompleted();
             return;
@@ -227,21 +226,17 @@ export class BrowserWorker {
             clearTimeout(this.drainTimer);
             this.drainTimer = null;
         }
-        if (this.recycleOnDrained) {
-            await this.recycle();
-        } else {
-            await this.shutdown(0);
-        }
+        await this.shutdown(0);
     }
 
-    private recycle(): Promise<void> {
-        this.recyclePromise ??= this.runRecycle().finally(() => {
+    private recycle(reason: string): Promise<void> {
+        this.recyclePromise ??= this.runRecycle(reason).finally(() => {
             this.recyclePromise = null;
         });
         return this.recyclePromise;
     }
 
-    private async runRecycle(): Promise<void> {
+    private async runRecycle(reason: string): Promise<void> {
         if (this.shutdownStarted) {
             return;
         }
@@ -249,41 +244,32 @@ export class BrowserWorker {
         // dispatched before this point must not act after the swap.
         this.recycleGeneration += 1;
         this.currentState = 'recycling';
-        this.logger.info('Recycling the browser in place');
-        // A forced recycle (drain timeout) can still have live sessions;
-        // close them first so the old browser shuts down promptly.
-        for (const sessionId of this.gateway?.activeSessionIds ?? []) {
-            this.gateway?.closeSession(sessionId, 1001, 'worker is recycling');
-        }
-        const oldServer = this.browserServer;
-        this.browserServer = null;
+        this.logger.info('Recycling the browser in place', { reason });
         try {
             const workerId = this.workerIdValue;
             if (!workerId) {
                 throw new Error('worker has no registration to recycle');
             }
-            // Launch the replacement before closing the old browser: sessions
-            // that dial the gateway mid-recycle reach a live endpoint instead
-            // of a dead one, at the cost of two browsers briefly coexisting.
-            const browserServer = await this.launchBrowser(this.config);
-            if (this.shutdownStarted) {
-                await this.closeBrowserServer(browserServer);
-                if (oldServer) {
-                    await this.closeBrowserServer(oldServer);
+            const keepBrowser = this.retirePromise !== null;
+            if (keepBrowser) {
+                this.logger.info('The previous browser still has open sessions; keeping the current browser');
+            } else {
+                const browserServer = await this.launchBrowser(this.config);
+                if (this.shutdownStarted) {
+                    await this.closeBrowserServer(browserServer);
+                    return;
                 }
-                return;
+                const oldServer = this.browserServer;
+                this.attachBrowserServer(browserServer);
+                this.gateway?.setBrowserEndpoint(browserServer.wsEndpoint());
+                if (oldServer) {
+                    this.retireBrowser(oldServer);
+                }
             }
-            this.attachBrowserServer(browserServer);
-            this.gateway?.setBrowserEndpoint(browserServer.wsEndpoint());
             // Reset at the swap, not after register(): sessions served by the
             // replacement browser while the old one is still closing must
             // count toward the new budget, not be erased by a later reset.
             this.servedSessions = 0;
-            if (oldServer && !(await this.closeBrowserServer(oldServer))) {
-                // A wedged browser we cannot stop would leak a process per
-                // recycle; exit instead so the supervisor reclaims them all.
-                throw new Error('old browser could not be stopped');
-            }
             try {
                 const recycled = await this.controlPlane.recycle(
                     workerId,
@@ -320,8 +306,15 @@ export class BrowserWorker {
             // already-bumped generation, so only a bump at completion makes
             // their late responses distinguishable from post-swap ones.
             this.recycleGeneration += 1;
+            if (this.state === 'draining') {
+                await this.bestEffortStatus('draining');
+                return;
+            }
             this.currentState = 'running';
-            this.logger.info('Worker recycled with a fresh browser', { workerId: this.workerIdValue });
+            this.logger.info(
+                keepBrowser ? 'Worker renewed its session budget' : 'Worker recycled with a fresh browser',
+                { workerId: this.workerIdValue },
+            );
         } catch (error) {
             if (this.shutdownStarted) {
                 return;
@@ -329,6 +322,43 @@ export class BrowserWorker {
             this.logger.error('Recycle failed; exiting for a supervisor restart', { error: formatError(error) });
             await this.shutdown(1);
         }
+    }
+
+    private retireBrowser(browserServer: BrowserServerLike): void {
+        this.retiringBrowser = browserServer;
+        this.retirePromise = this.runRetire(browserServer).finally(() => {
+            this.retirePromise = null;
+        });
+    }
+
+    private async runRetire(browserServer: BrowserServerLike): Promise<void> {
+        const endpoint = browserServer.wsEndpoint();
+        let timer: NodeJS.Timeout | null = null;
+        const timedOut = await Promise.race([
+            this.gateway ? this.gateway.whenEndpointIdle(endpoint).then(() => false) : Promise.resolve(false),
+            new Promise<boolean>(resolve => {
+                timer = setTimeout(() => resolve(true), this.config.lifecycle.drainTimeoutMs);
+                timer.unref();
+            }),
+        ]);
+        if (timer) {
+            clearTimeout(timer);
+        }
+        if (this.shutdownStarted || this.retiringBrowser !== browserServer) {
+            return;
+        }
+        if (timedOut) {
+            this.logger.warn('Drain timeout expired; closing sessions on the old browser');
+            this.gateway?.closeEndpointSessions(endpoint, 1001, 'worker is recycling');
+        }
+        this.retiringBrowser = null;
+        if (!(await this.closeBrowserServer(browserServer))) {
+            // A wedged browser we cannot stop would leak a process per
+            // recycle; exit instead so the supervisor reclaims them all.
+            await this.fatal(new Error('old browser could not be stopped'));
+            return;
+        }
+        this.logger.info('Old browser closed');
     }
 
     private attachBrowserServer(browserServer: BrowserServerLike): void {
@@ -475,6 +505,8 @@ export class BrowserWorker {
             this.drainTimer = null;
         }
         this.logger.info('Worker is shutting down', { exitCode });
+        const retiringBrowser = this.retiringBrowser;
+        this.retiringBrowser = null;
 
         try {
             await this.bestEffortStatus('shutting_down');
@@ -487,6 +519,9 @@ export class BrowserWorker {
                 try {
                     if (this.browserServer) {
                         await this.closeBrowserServer(this.browserServer);
+                    }
+                    if (retiringBrowser) {
+                        await this.closeBrowserServer(retiringBrowser);
                     }
                 } finally {
                     this.resolveExit(exitCode);
