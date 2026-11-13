@@ -1490,7 +1490,7 @@ function createRecordingWorker(
 function testConfig(drainTimeoutMs: number, port = 3131): WorkerConfig {
     return {
         controlPlane: { serverUrl: 'http://127.0.0.1:1' },
-        browser: { type: 'chromium', headless: true },
+        browser: { type: 'chromium', headless: true, args: [] },
         gateway: { port, privateHostname: 'worker-test', maxSlots: 5 },
         lifecycle: { heartbeatIntervalMs: 10, drainTimeoutMs },
         logging: { level: 'error', format: 'json' },

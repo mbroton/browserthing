@@ -605,6 +605,7 @@ async function launchPlaywrightServer(config: WorkerConfig): Promise<BrowserServ
         handleSIGINT: false,
         handleSIGTERM: false,
         handleSIGHUP: false,
+        ...(config.browser.args.length > 0 && { args: config.browser.args }),
     };
     switch (config.browser.type) {
         case 'chromium':

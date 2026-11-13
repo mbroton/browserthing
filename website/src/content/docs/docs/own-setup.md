@@ -85,7 +85,9 @@ replaces its browser. `MAX_SLOTS` limits the sessions on each worker.
   Browser contexts separate cookies and storage, but a browser crash ends all
   sessions on that worker. The worker then exits. A restart policy, such as the
   one in the supplied Compose file, must start it again.
-- Browser launch flags apply to the whole worker. Set options for each session,
+- Browser launch flags, set with
+  [`BROWSER_ARGS`](/browserthing/docs/configuration/#worker), apply to the
+  whole worker. Set options for each session,
   such as proxy and viewport, through browser contexts.
 - BrowserThing is for your own applications and trusted clients. See the
   [security boundary](/browserthing/docs/security/).
