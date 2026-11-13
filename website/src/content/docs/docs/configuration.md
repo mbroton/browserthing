@@ -67,6 +67,7 @@ Worker time values are integer **seconds**.
 | `MAX_SLOTS` | `5` | Concurrent sessions per worker, from 1 to 1024. |
 | `HEADLESS` | `true` | Run the browser without a visible window. |
 | `BROWSER_ARGS` | Unset | Extra browser command-line flags, as a JSON array of strings. |
+| `BLOCK_PRIVATE_NETWORKS` | `false` | Chromium only. Stop browser traffic to private, loopback, link-local, and reserved addresses. See [security](/browserthing/docs/security/#block-private-networks). |
 | `HEARTBEAT_INTERVAL` | `5` | Interval between worker heartbeats. |
 | `DRAIN_TIMEOUT` | `300` | Maximum wait for open sessions on the old browser after a recycle, or during shutdown. Remaining sessions close when it expires. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, or `error`. |
@@ -94,6 +95,11 @@ The worker refuses flags that turn off the Chromium sandbox: `--no-sandbox`,
 `--disable-seccomp-filter-sandbox`, and `--disable-gpu-sandbox`. This check
 catches mistakes. It is not a security boundary: other flags can also make the
 browser less safe, so set only flags that you trust.
+
+With `BLOCK_PRIVATE_NETWORKS=true`, the worker also refuses flags that change
+the proxy or the WebRTC policy: `--proxy-server`, `--proxy-pac-url`,
+`--proxy-bypass-list`, `--proxy-auto-detect`, `--no-proxy-server`, and
+`--force-webrtc-ip-handling-policy`.
 
 Set session options such as proxy, locale, viewport, and cookies through
 Playwright browser contexts.

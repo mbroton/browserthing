@@ -1,0 +1,85 @@
+name: browserthing-egress-check
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 10.213.0.0/24
+  public:
+    ipam:
+      config:
+        - subnet: 100.128.0.0/24
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_USER=pwd
+      - POSTGRES_PASSWORD=pwd
+      - POSTGRES_DB=pwd
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pwd -d pwd"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  server:
+    build:
+      context: ../../../server
+    environment:
+      - DATABASE_URL=postgres://pwd:pwd@postgres:5432/pwd?sslmode=disable
+      - AUTH_DISABLED=true
+      - MAX_LIFETIME_SESSIONS=2
+    networks: [internal]
+    ports:
+      - "127.0.0.1:${EGRESS_CHECK_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ../..
+    init: true
+    security_opt:
+      - seccomp=../../seccomp_profile.json
+    shm_size: "1gb"
+    environment:
+      - SERVER_URL=http://server:8080
+      - BROWSER_TYPE=chromium
+      - BLOCK_PRIVATE_NETWORKS=${BLOCK_PRIVATE_NETWORKS:-true}
+      - HEARTBEAT_INTERVAL=1
+      - DRAIN_TIMEOUT=0
+      - LOG_FORMAT=text
+    networks: [internal, public]
+    depends_on:
+      server:
+        condition: service_healthy
+
+  private-site:
+    image: node:24-alpine
+    command: ["node", "/fixture.mjs"]
+    environment:
+      - FIXTURE_NAME=private-site
+    volumes:
+      - ./fixture.mjs:/fixture.mjs:ro
+    networks:
+      internal:
+        ipv4_address: 10.213.0.10
+
+  public-site:
+    image: node:24-alpine
+    command: ["node", "/fixture.mjs"]
+    environment:
+      - FIXTURE_NAME=public-site
+    volumes:
+      - ./fixture.mjs:/fixture.mjs:ro
+    networks:
+      public:
+        ipv4_address: 100.128.0.10
