@@ -29,11 +29,20 @@ Server duration values use Go duration notation, such as `10s` or `5m`.
 | `RELAY_PING_INTERVAL` | `20s` | Interval between relay WebSocket pings. |
 | `RELAY_PONG_TIMEOUT` | `60s` | Maximum time without data or a pong from a peer. |
 | `SHUTDOWN_GRACE_PERIOD` | `20s` | Time allowed for active relays to finish after shutdown begins. |
+| `MAX_SESSION_DURATION` | `0` | Maximum time a client can stay connected to a session. `0` disables the limit. |
 
 `SESSION_HEARTBEAT_INTERVAL` must be less than `SESSION_HEARTBEAT_TTL`.
 `RELAY_PING_INTERVAL` must be less than `RELAY_PONG_TIMEOUT`.
 `WORKER_DIAL_TIMEOUT` must be less than the 15-second session reconciliation
 grace period. The server rejects an invalid timeout configuration.
+
+Set `MAX_SESSION_DURATION` to free slots that clients hold open without a
+`browser.close()`. The limit starts when the client connects. When it expires,
+the server closes the client and worker connections with WebSocket code `1008`
+and the reason `session exceeded MAX_SESSION_DURATION (<value>)`, for example
+`(1h0m0s)`. The session becomes `completed`, and its slot is free again. Each
+server replica applies its own setting to the connections it relays, so give
+all replicas the same value.
 
 Budget `pool_max_conns + 1` PostgreSQL connections per server replica. The extra
 connection listens for capacity notifications. Each replica has its own

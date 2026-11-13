@@ -105,6 +105,7 @@ func run(ctx context.Context, args []string, stdout io.Writer, logger *slog.Logg
 		PongTimeout:       runtimeConfig.RelayPongTimeout,
 		HeartbeatInterval: runtimeConfig.SessionHeartbeatInterval,
 		ShutdownGrace:     runtimeConfig.ShutdownGracePeriod,
+		MaxDuration:       runtimeConfig.MaxSessionDuration,
 	})
 	controlPlane := httpapi.New(
 		pool,

@@ -75,9 +75,20 @@ registered workers: chromium 1.64.1`. Admission waits up to
 
 Sessions on one worker share a browser process. A browser crash ends those
 sessions. Recycling also closes remaining sessions when `DRAIN_TIMEOUT` expires.
-A server restart ends connections on that relay. Check logs before you retry
+A server restart ends connections on that relay. Sessions that start together
+also end together when they reach `MAX_SESSION_DURATION`. Check logs before you retry
 work, especially if the automation changes data on other sites. A new connection
 starts a new session; it does not resume the earlier task.
+
+## Calls fail with "session exceeded MAX_SESSION_DURATION"
+
+Playwright calls fail with `session exceeded MAX_SESSION_DURATION (<value>)`
+after the server closes the connection with WebSocket code `1008`. The session
+was connected for longer than the server's `MAX_SESSION_DURATION`.
+Close the browser connection when a task is done, and split long work into
+shorter sessions. If the work needs more time, increase the value on all server
+replicas, or set `0` to disable the limit. See the
+[configuration reference](/browserthing/docs/configuration/).
 
 ## Chromium fails during startup
 

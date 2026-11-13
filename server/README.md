@@ -44,6 +44,11 @@ The server uses these environment variables:
 - `SHUTDOWN_GRACE_PERIOD` gives active relays time to finish after shutdown
   starts. Its default is `20s`. The server then closes each remaining relay
   with WebSocket code `1001`.
+- `MAX_SESSION_DURATION` limits how long a client can stay connected to a
+  session. Its default is `0`, which disables the limit. When the limit
+  expires, the relay closes both peers with WebSocket code `1008` and the
+  reason `session exceeded MAX_SESSION_DURATION (<value>)`, then marks the
+  session `completed`. Each replica applies the limit to the relays it owns.
 
 The admission queue is in memory and belongs to one server replica. The
 `queued` capacity field reports only that replica's queue depth. Database

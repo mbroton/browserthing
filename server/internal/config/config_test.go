@@ -25,7 +25,8 @@ func TestLoad_Defaults(t *testing.T) {
 		config.RelayWriteTimeout != 30*time.Second ||
 		config.RelayPingInterval != 20*time.Second ||
 		config.RelayPongTimeout != 60*time.Second ||
-		config.ShutdownGracePeriod != 20*time.Second {
+		config.ShutdownGracePeriod != 20*time.Second ||
+		config.MaxSessionDuration != 0 {
 		t.Fatalf("Load() = %+v, want documented defaults", config)
 	}
 }
@@ -47,6 +48,7 @@ func TestLoad_Overrides(t *testing.T) {
 		"RELAY_PING_INTERVAL":        "6s",
 		"RELAY_PONG_TIMEOUT":         "7s",
 		"SHUTDOWN_GRACE_PERIOD":      "8s",
+		"MAX_SESSION_DURATION":       "1h30m",
 	}
 	config, err := Load(func(name string) string { return values[name] })
 	if err != nil {
@@ -66,8 +68,26 @@ func TestLoad_Overrides(t *testing.T) {
 		config.RelayWriteTimeout != 5*time.Second ||
 		config.RelayPingInterval != 6*time.Second ||
 		config.RelayPongTimeout != 7*time.Second ||
-		config.ShutdownGracePeriod != 8*time.Second {
+		config.ShutdownGracePeriod != 8*time.Second ||
+		config.MaxSessionDuration != 90*time.Minute {
 		t.Fatalf("Load() = %+v, want overrides", config)
+	}
+}
+
+func TestLoad_MaxSessionDurationZeroDisablesLimit(t *testing.T) {
+	for _, value := range []string{"0", "0s"} {
+		config, err := Load(func(name string) string {
+			if name == "MAX_SESSION_DURATION" {
+				return value
+			}
+			return ""
+		})
+		if err != nil {
+			t.Fatalf("Load(MAX_SESSION_DURATION=%q) returned an error: %v", value, err)
+		}
+		if config.MaxSessionDuration != 0 {
+			t.Fatalf("MaxSessionDuration = %v for %q, want 0", config.MaxSessionDuration, value)
+		}
 	}
 }
 
@@ -81,6 +101,8 @@ func TestLoad_RejectsInvalidValues(t *testing.T) {
 		{name: "invalid duration", key: "WORKER_HEARTBEAT_TTL", value: "soon", wantErr: "must be a duration"},
 		{name: "zero duration", key: "SESSION_HEARTBEAT_TTL", value: "0s", wantErr: "must be positive"},
 		{name: "sub-microsecond duration", key: "PENDING_SESSION_TTL", value: "1ns", wantErr: "at least one microsecond"},
+		{name: "invalid session duration", key: "MAX_SESSION_DURATION", value: "60", wantErr: "must be a duration"},
+		{name: "negative session duration", key: "MAX_SESSION_DURATION", value: "-1m", wantErr: "must not be negative"},
 		{name: "negative queue", key: "MAX_QUEUE_SIZE", value: "-1", wantErr: "must not be negative"},
 		{name: "negative lifetime", key: "MAX_LIFETIME_SESSIONS", value: "-1", wantErr: "must not be negative"},
 		{name: "unknown browser", key: "DEFAULT_BROWSER_TYPE", value: "chrome", wantErr: "must be one of"},
