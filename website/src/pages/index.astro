@@ -53,7 +53,13 @@ const steps = [
 curl -fsSL --create-dirs -o worker/seccomp_profile.json \\
   https://raw.githubusercontent.com/mbroton/browserthing/v${release.release}/worker/seccomp_profile.json`,
   },
-  { title: 'Start the server, PostgreSQL, and a Chromium worker', code: 'docker compose up -d' },
+  {
+    title: 'Start the server, PostgreSQL, and a Chromium worker',
+    code: `docker compose up -d --wait server
+export BROWSERTHING_API_KEY=$(docker compose exec -T server server apikey create --name quickstart)
+echo "WORKER_API_KEY=$BROWSERTHING_API_KEY" >> .env
+docker compose up -d`,
+  },
   { title: 'Install the matching Playwright client', code: `npm install playwright@${release.playwright}` },
 ];
 
