@@ -8,16 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"server/internal/db/data"
 )
-
-const authQueryTimeout = 2 * time.Second
 
 var (
 	errUnauthorized = errors.New("httpapi: unauthorized")
@@ -48,10 +44,6 @@ func (NoAuthAuthenticator) Authenticate(context.Context, string) (Principal, err
 type TokenAuthenticator struct {
 	queries *data.Queries
 	logger  *slog.Logger
-
-	mu                      sync.Mutex
-	authRequired            bool
-	unauthenticatedWarnOnce sync.Once
 }
 
 func NewTokenAuthenticator(queries *data.Queries, logger *slog.Logger) *TokenAuthenticator {
@@ -61,18 +53,34 @@ func NewTokenAuthenticator(queries *data.Queries, logger *slog.Logger) *TokenAut
 	}
 }
 
-func (a *TokenAuthenticator) Authenticate(ctx context.Context, authorization string) (Principal, error) {
-	required, err := a.requiresAuthentication(ctx)
+// NewAuthenticator returns the authenticator for the server's configuration and
+// logs a warning when the server accepts no requests or accepts every request.
+func NewAuthenticator(
+	ctx context.Context,
+	disabled bool,
+	queries *data.Queries,
+	logger *slog.Logger,
+) (Authenticator, error) {
+	if disabled {
+		logger.Warn(
+			"authentication is disabled by AUTH_DISABLED=true; every client that can reach the server has full access. Use this only for local development",
+		)
+		return NoAuthAuthenticator{}, nil
+	}
+	count, err := queries.CountActiveAPIKeys(ctx)
 	if err != nil {
-		return Principal{}, err
+		return nil, fmt.Errorf("counting active api keys: %w", err)
 	}
-	if !required {
-		a.unauthenticatedWarnOnce.Do(func() {
-			a.logger.Warn("control plane authentication disabled because no active api keys exist")
-		})
-		return Principal{}, nil
+	if count == 0 {
+		logger.Warn(
+			"no active api keys exist; the server refuses api and relay requests with 401 until you create one",
+			"create_key", "server apikey create --name <name>",
+		)
 	}
+	return NewTokenAuthenticator(queries, logger), nil
+}
 
+func (a *TokenAuthenticator) Authenticate(ctx context.Context, authorization string) (Principal, error) {
 	token, ok := bearerToken(authorization)
 	if !ok {
 		return Principal{}, errUnauthorized
@@ -92,35 +100,6 @@ func (a *TokenAuthenticator) Authenticate(ctx context.Context, authorization str
 
 	keyID := key.ID
 	return Principal{KeyID: &keyID}, nil
-}
-
-func (a *TokenAuthenticator) requiresAuthentication(ctx context.Context) (bool, error) {
-	a.mu.Lock()
-	required := a.authRequired
-	a.mu.Unlock()
-	if required {
-		return true, nil
-	}
-
-	// A request whose count predates a concurrent first-key commit can still pass.
-	// That window is bounded by the request; after a positive count, the latch stays enabled.
-	queryCtx, cancel := context.WithTimeout(ctx, authQueryTimeout)
-	defer cancel()
-	count, err := a.queries.CountActiveAPIKeys(queryCtx)
-	if err != nil {
-		return false, fmt.Errorf("%w: counting active api keys: %w", errAuthBackend, err)
-	}
-	if count == 0 {
-		a.mu.Lock()
-		required = a.authRequired
-		a.mu.Unlock()
-		return required, nil
-	}
-
-	a.mu.Lock()
-	a.authRequired = true
-	a.mu.Unlock()
-	return true, nil
 }
 
 func bearerToken(authorization string) (string, bool) {

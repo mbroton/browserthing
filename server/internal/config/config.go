@@ -23,6 +23,7 @@ type Config struct {
 	RelayPongTimeout         time.Duration
 	ShutdownGracePeriod      time.Duration
 	MaxSessionDuration       time.Duration
+	AuthDisabled             bool
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -96,6 +97,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	authDisabled, err := boolean(getenv, "AUTH_DISABLED")
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		WorkerHeartbeatTTL:       workerTTL,
@@ -114,7 +119,19 @@ func Load(getenv func(string) string) (Config, error) {
 		RelayPongTimeout:         relayPongTimeout,
 		ShutdownGracePeriod:      shutdownGracePeriod,
 		MaxSessionDuration:       maxSessionDuration,
+		AuthDisabled:             authDisabled,
 	}, nil
+}
+
+func boolean(getenv func(string) string, name string) (bool, error) {
+	switch getenv(name) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s must be true or false", name)
+	}
 }
 
 func browserType(getenv func(string) string, name, defaultValue string) (string, error) {

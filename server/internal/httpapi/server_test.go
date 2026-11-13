@@ -66,7 +66,7 @@ func TestServer_WorkerAndSessionRoutes(t *testing.T) {
 	pool := newMigratedTestPool(t)
 	queries := data.New(pool)
 	logger := testLogger(io.Discard)
-	server := New(pool, queries, NewTokenAuthenticator(queries, logger), logger)
+	server := New(pool, queries, NoAuthAuthenticator{}, logger)
 
 	register := requestJSON(t, server.Handler, http.MethodPost, "/internal/workers", map[string]any{
 		"address":            "ws://worker:3000",
@@ -443,19 +443,40 @@ func TestServer_Authentication(t *testing.T) {
 	queries := data.New(pool)
 	var logs bytes.Buffer
 	logger := testLogger(&logs)
-	authenticator := NewTokenAuthenticator(queries, logger)
-	server := New(pool, queries, authenticator, logger)
 
-	open := requestJSON(t, server.Handler, http.MethodGet, "/v1/workers", nil, "")
-	if open.Code != http.StatusOK {
-		t.Fatalf("request with no active keys status = %d, want %d", open.Code, http.StatusOK)
+	disabled, err := NewAuthenticator(t.Context(), true, queries, logger)
+	if err != nil {
+		t.Fatalf("NewAuthenticator(disabled) returned an error: %v", err)
 	}
-	secondOpen := requestJSON(t, server.Handler, http.MethodGet, "/v1/workers", nil, "")
-	if secondOpen.Code != http.StatusOK {
-		t.Fatalf("second request with no active keys status = %d, want %d", secondOpen.Code, http.StatusOK)
+	openServer := New(pool, queries, disabled, logger)
+	if open := requestJSON(t, openServer.Handler, http.MethodGet, "/v1/workers", nil, ""); open.Code != http.StatusOK {
+		t.Fatalf("AUTH_DISABLED request status = %d, want %d", open.Code, http.StatusOK)
 	}
-	if count := strings.Count(logs.String(), "authentication disabled"); count != 1 {
-		t.Fatalf("unauthenticated warning count = %d, want 1: %s", count, logs.String())
+	if !strings.Contains(logs.String(), "AUTH_DISABLED=true") {
+		t.Fatalf("AUTH_DISABLED warning missing: %s", logs.String())
+	}
+
+	logs.Reset()
+	authenticator, err := NewAuthenticator(t.Context(), false, queries, logger)
+	if err != nil {
+		t.Fatalf("NewAuthenticator() returned an error: %v", err)
+	}
+	if !strings.Contains(logs.String(), "server apikey create") {
+		t.Fatalf("missing-key warning does not say how to create a key: %s", logs.String())
+	}
+	server := New(pool, queries, authenticator, logger)
+	for _, path := range []string{"/healthz", "/readyz"} {
+		if health := requestJSON(t, server.Handler, http.MethodGet, path, nil, ""); health.Code != http.StatusOK {
+			t.Fatalf("%s with no active keys status = %d, want %d", path, health.Code, http.StatusOK)
+		}
+	}
+	closed := requestJSON(t, server.Handler, http.MethodGet, "/v1/workers", nil, "")
+	if closed.Code != http.StatusUnauthorized {
+		t.Fatalf("request with no active keys status = %d, want %d", closed.Code, http.StatusUnauthorized)
+	}
+	closedWithToken := requestJSON(t, server.Handler, http.MethodGet, "/v1/workers", nil, "pwd_not-created-yet")
+	if closedWithToken.Code != http.StatusUnauthorized {
+		t.Fatalf("token with no active keys status = %d, want %d", closedWithToken.Code, http.StatusUnauthorized)
 	}
 
 	const token = "pwd_right-token-value"

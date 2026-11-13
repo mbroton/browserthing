@@ -45,9 +45,11 @@ REST error body with `curl -sS -i`; `curl -f` hides the response body.
 
 ## Requests return 401
 
-The server requires a key after you create the first API key. Give workers
-`WORKER_API_KEY`, and give clients an authorization header or a `token` query
-parameter. Recreate workers after you change their environment variables.
+The server requires a key for every request except `/healthz` and `/readyz`.
+With zero active keys, it refuses every request and logs how to create a key.
+Give workers `WORKER_API_KEY`, and give clients an authorization header or a
+`token` query parameter. Recreate workers after you change their environment
+variables.
 
 ## A remote worker registers but connections fail
 
@@ -58,7 +60,7 @@ worker host's firewall.
 
 ## Requests wait or return 429
 
-Inspect `GET /v1/capacity` with an API key if needed. Check available slots,
+Inspect `GET /v1/capacity` with an API key. Check available slots,
 queue depth, and worker health. Close client connections after use. Add workers
 if the workload needs more capacity, and measure CPU and memory before you
 increase `MAX_SLOTS`.

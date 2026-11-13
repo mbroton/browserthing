@@ -141,13 +141,19 @@ jobs:
 
       - name: Start the documented deployment
         working-directory: ${{ runner.temp }}/quick-start
-        run: docker compose up -d --pull never
+        run: |
+          docker compose up -d --wait --pull never server
+          key="$(docker compose exec -T server server apikey create --name quickstart)"
+          echo "::add-mask::$key"
+          echo "WORKER_API_KEY=$key" >> .env
+          echo "BROWSERTHING_API_KEY=$key" >> "$GITHUB_ENV"
+          docker compose up -d --pull never
 
       - name: Smoke-test the release images
         working-directory: ./worker
         run: |
           for _ in {1..15}; do
-            if WS_ENDPOINT=ws://127.0.0.1:8080 npm run smoke; then
+            if WS_ENDPOINT="ws://127.0.0.1:8080/?token=$BROWSERTHING_API_KEY" npm run smoke; then
               exit 0
             fi
             sleep 2

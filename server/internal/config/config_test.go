@@ -26,7 +26,8 @@ func TestLoad_Defaults(t *testing.T) {
 		config.RelayPingInterval != 20*time.Second ||
 		config.RelayPongTimeout != 60*time.Second ||
 		config.ShutdownGracePeriod != 20*time.Second ||
-		config.MaxSessionDuration != 0 {
+		config.MaxSessionDuration != 0 ||
+		config.AuthDisabled {
 		t.Fatalf("Load() = %+v, want documented defaults", config)
 	}
 }
@@ -49,6 +50,7 @@ func TestLoad_Overrides(t *testing.T) {
 		"RELAY_PONG_TIMEOUT":         "7s",
 		"SHUTDOWN_GRACE_PERIOD":      "8s",
 		"MAX_SESSION_DURATION":       "1h30m",
+		"AUTH_DISABLED":              "true",
 	}
 	config, err := Load(func(name string) string { return values[name] })
 	if err != nil {
@@ -69,7 +71,8 @@ func TestLoad_Overrides(t *testing.T) {
 		config.RelayPingInterval != 6*time.Second ||
 		config.RelayPongTimeout != 7*time.Second ||
 		config.ShutdownGracePeriod != 8*time.Second ||
-		config.MaxSessionDuration != 90*time.Minute {
+		config.MaxSessionDuration != 90*time.Minute ||
+		!config.AuthDisabled {
 		t.Fatalf("Load() = %+v, want overrides", config)
 	}
 }
@@ -105,6 +108,7 @@ func TestLoad_RejectsInvalidValues(t *testing.T) {
 		{name: "negative session duration", key: "MAX_SESSION_DURATION", value: "-1m", wantErr: "must not be negative"},
 		{name: "negative queue", key: "MAX_QUEUE_SIZE", value: "-1", wantErr: "must not be negative"},
 		{name: "negative lifetime", key: "MAX_LIFETIME_SESSIONS", value: "-1", wantErr: "must not be negative"},
+		{name: "non-boolean auth setting", key: "AUTH_DISABLED", value: "yes", wantErr: "must be true or false"},
 		{name: "unknown browser", key: "DEFAULT_BROWSER_TYPE", value: "chrome", wantErr: "must be one of"},
 		{name: "heartbeat interval at ttl", key: "SESSION_HEARTBEAT_INTERVAL", value: "30s", wantErr: "must be less than"},
 		{name: "ping interval at pong timeout", key: "RELAY_PING_INTERVAL", value: "60s", wantErr: "must be less than"},

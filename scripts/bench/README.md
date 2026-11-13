@@ -119,7 +119,7 @@ concurrency), `--expect-workers`, `--label` for throughput.
   production default drains a worker after 50 lifetime sessions). With
   recycling on, the throughput number would also include worker restart time,
   which depends on the container runtime, not on the grid.
-- The bench stack runs in unauthenticated bootstrap mode (zero API keys),
+- The bench stack runs without authentication (`AUTH_DISABLED=true`),
   like the local compose stack. With authentication enabled the server also
   verifies the key hash on every request (an indexed lookup, plus a last-used
   timestamp update throttled to once per minute), which adds a small

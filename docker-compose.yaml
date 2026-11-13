@@ -22,10 +22,9 @@ services:
   server:
     image: ghcr.io/mbroton/browserthing/server:latest
     environment:
-      # A server with zero API keys runs in unauthenticated bootstrap mode.
-      # Create the first key: docker compose exec server server apikey create --name <name>
-      # Creating a key locks the whole API, so hand the key to every worker
-      # (WORKER_API_KEY below) and client in the same step.
+      # The server refuses requests until an API key exists. Create one:
+      # docker compose exec server server apikey create --name <name>
+      # Give the key to every worker (WORKER_API_KEY below) and client.
       - DATABASE_URL=postgres://pwd:${POSTGRES_PASSWORD:-pwd}@postgres:5432/pwd?sslmode=disable
     ports:
       - "127.0.0.1:8080:8080"
@@ -60,7 +59,8 @@ services:
       # Max seconds to wait for open sessions on SIGTERM. Raise together with
       # stop_grace_period: grace must stay above DRAIN_TIMEOUT + 20s cleanup.
       - DRAIN_TIMEOUT=30
-      # Required as soon as the server has an API key (see the server comment).
+      # Required. Until it is set, the worker exits with a 401 error and
+      # Docker restarts it (see the server comment).
       - WORKER_API_KEY=${WORKER_API_KEY:-}
     depends_on:
       server:

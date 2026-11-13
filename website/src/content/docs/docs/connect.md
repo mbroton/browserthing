@@ -18,7 +18,8 @@ Python package does not publish every patch release, so the Python example can
 use an earlier patch. Use `wss://` when your endpoint has TLS.
 
 The examples save a screenshot as a small browser task. Use the same connection
-for the browser actions your application needs.
+for the browser actions your application needs. They read the API key from
+`BROWSERTHING_API_KEY`.
 
 ## Node.js
 
@@ -31,7 +32,9 @@ Save this as `connect.mjs`:
 ```js
 import { chromium } from 'playwright';
 
-const browser = await chromium.connect('ws://localhost:8080');
+const browser = await chromium.connect('ws://localhost:8080', {
+  headers: { Authorization: `Bearer ${process.env.BROWSERTHING_API_KEY}` },
+});
 try {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },
@@ -57,12 +60,17 @@ Save this as `connect.py`:
 
 ```python
 import asyncio
+import os
+
 from playwright.async_api import async_playwright
 
 
 async def main():
     async with async_playwright() as p:
-        browser = await p.chromium.connect("ws://localhost:8080")
+        browser = await p.chromium.connect(
+            "ws://localhost:8080",
+            headers={"Authorization": f"Bearer {os.environ['BROWSERTHING_API_KEY']}"},
+        )
         try:
             context = await browser.new_context()
             page = await context.new_page()
@@ -128,8 +136,8 @@ repository checkout.
 
 ## API keys
 
-After you create an API key, clients must send it with each connection. For a
-Node.js client, use an authorization header:
+Clients must send an API key with each connection. For a Node.js client, use an
+authorization header:
 
 ```js
 const browser = await chromium.connect('wss://grid.example.com', {
