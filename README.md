@@ -193,10 +193,12 @@ flowchart TD
 - **PostgreSQL** holds all durable state: sessions, workers, and API keys
   are rows. Sessions of dead workers are closed out automatically, so
   capacity recovers without intervention.
-- **Recycling**: after a configurable number of sessions, a worker drains
-  and replaces its browser without restarting the container. Sessions still
-  running after `DRAIN_TIMEOUT` are closed. Selection concentrates load on the
-  longest-serving worker, so recycles tend to happen one worker at a time.
+- **Recycling**: after a configurable number of sessions, a worker replaces
+  its browser without restarting the container. New sessions go to the new
+  browser at once, and open sessions finish on the old one. Sessions still
+  open on the old browser after `DRAIN_TIMEOUT` are closed. Selection
+  concentrates load on the longest-serving worker, so recycles tend to
+  happen one worker at a time.
 
 ## Production deployment
 

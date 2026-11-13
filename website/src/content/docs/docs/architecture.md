@@ -58,12 +58,22 @@ arrival order. Each server replica has its own queue. See
 
 ## Worker recycling and failures
 
-By default, a worker drains after 50 lifetime session claims. Draining stops new
-sessions and waits for existing sessions for up to `DRAIN_TIMEOUT`. The worker
-then replaces its browser process and resumes service without restarting the
-container. A shutdown signal such as `SIGTERM` drains and stops the worker instead.
+By default, a worker recycles its browser after 50 lifetime session claims. It
+starts a new browser and sends new sessions to it at once, without restarting
+the container. Open sessions finish on the old browser, which closes after its
+last session ends. A slow session therefore does not stop the worker from
+taking new sessions. While both browsers run, the worker needs memory for one
+more browser.
 
-When the drain timeout expires, remaining sessions are closed. The supplied
+A worker runs at most two browsers. If it reaches the session limit again
+before the old browser closes, the current browser keeps serving and recycles
+at a later limit.
+
+A shutdown signal such as `SIGTERM` stops new sessions, waits for open
+sessions, and then stops the worker.
+
+When `DRAIN_TIMEOUT` expires on an old browser or on a worker that is shutting
+down, remaining sessions are closed. The supplied
 Compose file sets this timeout to **30 seconds**; the worker's standalone default
 is 300 seconds. Set it for the time your tasks need to finish. See the
 [worker settings](/browserthing/docs/configuration/#worker).

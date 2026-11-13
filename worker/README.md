@@ -24,7 +24,7 @@ The right value depends on what the sessions do:
 
 When in doubt, keep the default and add workers instead of raising
 `MAX_SLOTS`: capacity grows the same either way, and each worker bounds how
-many sessions a browser crash or recycle can take down with it.
+many sessions a browser crash can take down with it.
 
 ## Scaling beyond one machine
 

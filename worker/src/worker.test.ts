@@ -199,7 +199,8 @@ test('heartbeat requests time out and the loop keeps ticking', async t => {
     assert.ok(heartbeatAttempts >= 3);
 });
 
-test('heartbeat draining status enters drain mode', async t => {
+test('heartbeat draining status recycles the browser', async t => {
+    let recycleRequests = 0;
     const server = await startControlPlane(async (request, response) => {
         if (request.url === '/internal/workers') {
             sendJSON(response, 201, { id: 'worker-1' });
@@ -209,16 +210,18 @@ test('heartbeat draining status enters drain mode', async t => {
             sendJSON(response, 200, { status: 'draining', stale_session_ids: [] });
             return;
         }
+        if (request.url?.endsWith('/recycle')) {
+            recycleRequests += 1;
+        }
         sendJSON(response, 200, { id: 'worker-1' });
     });
     t.after(() => server.close());
 
     const worker = createWorker(server.url, new FakeGateway([activeId]));
     await worker.start();
-    await waitFor(() => worker.state === 'draining');
+    await waitFor(() => recycleRequests >= 1);
+    assert.notEqual(worker.state, 'draining');
     await worker.shutdown(0);
-
-    assert.equal(worker.state, 'shutting_down');
 });
 
 test('a draining worker re-asserts drain intent after an available heartbeat', async () => {
@@ -226,12 +229,11 @@ test('a draining worker re-asserts drain intent after an available heartbeat', a
     const gateway = new FakeGateway([activeId]);
     const worker = createInjectedWorker(controlPlane, gateway, 5_000);
     await worker.start();
-    await worker.requestDrain('SIGTERM');
+    await worker.requestDrain('SIGTERM', true);
 
-    await waitFor(() => controlPlane.statuses.includes('draining'));
+    await waitFor(() => controlPlane.statuses.filter(status => status === 'draining').length >= 2);
+    assert.equal(worker.state, 'draining');
     await worker.shutdown(0);
-
-    assert.equal(controlPlane.statuses[0], 'draining');
 });
 
 test('heartbeat 404 registers a new worker ID', async t => {
@@ -288,11 +290,12 @@ test('heartbeat 404 re-asserts drain status immediately after registration', asy
     };
     const worker = createInjectedWorker(controlPlane, new FakeGateway([activeId]), 5_000);
     await worker.start();
-    await worker.requestDrain('SIGTERM');
+    await worker.requestDrain('SIGTERM', true);
 
     await waitFor(() => events.includes('status:worker-2:draining'));
-    assert.deepEqual(events.slice(0, 4), [
+    assert.deepEqual(events.slice(0, 5), [
         'register:worker-1',
+        'status:worker-1:draining',
         'heartbeat:worker-1',
         'register:worker-2',
         'status:worker-2:draining',
@@ -339,44 +342,164 @@ test('a control-plane drain recycles the browser in place instead of exiting', a
     await worker.shutdown(0);
 });
 
-test('drain timeout forces the browser swap with active connections', async () => {
+test('a recycle keeps serving while sessions on the old browser finish', async () => {
     const controlPlane = new FakeControlPlane();
     const gateway = new FakeGateway([activeId]);
-    const worker = createInjectedWorker(controlPlane, gateway, 30);
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 5_000);
+    await worker.start();
+
+    await bounded(worker.requestDrain('control plane'), 500);
+    assert.equal(worker.state, 'running');
+    assert.deepEqual(controlPlane.recycles, ['worker-1']);
+    assert.equal(browsers.length, 2);
+    assert.equal(browsers[0]!.closed, false);
+    assert.deepEqual(gateway.closedSessions, []);
+
+    gateway.addSession(secondId);
+    await delay(30);
+    assert.equal(browsers[0]!.closed, false);
+
+    gateway.closeSession(activeId);
+    await waitFor(() => browsers[0]!.closed);
+    assert.equal(browsers[1]!.closed, false);
+    assert.deepEqual(gateway.activeSessionIds, [secondId]);
+    await worker.shutdown(0);
+});
+
+test('the old browser closes with its sessions when DRAIN_TIMEOUT expires', async () => {
+    const controlPlane = new FakeControlPlane();
+    const gateway = new FakeGateway([activeId]);
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 30);
     await worker.start();
 
     await worker.requestDrain('control plane');
-    await waitFor(() => controlPlane.recycles.length === 1);
+    gateway.addSession(secondId);
+    await waitFor(() => browsers[0]!.closed);
 
     assert.equal(worker.state, 'running');
-    assert.equal(gateway.activeConnectionCount, 0);
     assert.deepEqual(gateway.closedSessions, [{ sessionId: activeId, code: 1001 }]);
-    assert.deepEqual(controlPlane.recycles, ['worker-1']);
+    assert.deepEqual(gateway.activeSessionIds, [secondId]);
+    assert.equal(browsers[1]!.closed, false);
     await worker.shutdown(0);
+});
+
+test('a spent session budget recycles at once while its sessions are still open', async () => {
+    const controlPlane = new FakeControlPlane(2);
+    const gateway = new FakeGateway();
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 5_000);
+    await worker.start();
+
+    gateway.addSession(activeId);
+    await delay(20);
+    assert.equal(controlPlane.recycles.length, 0);
+
+    gateway.addSession(secondId);
+    await waitFor(() => controlPlane.recycles.length === 1);
+    await waitFor(() => worker.state === 'running');
+    assert.equal(browsers.length, 2);
+    assert.deepEqual(gateway.activeSessionIds, [activeId, secondId]);
+    assert.deepEqual(gateway.closedSessions, []);
+    await worker.shutdown(0);
+});
+
+test('a spent budget while the old browser has open sessions keeps the current browser', async () => {
+    const controlPlane = new FakeControlPlane(1);
+    const gateway = new FakeGateway();
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 5_000);
+    await worker.start();
+
+    gateway.addSession(activeId);
+    await waitFor(() => controlPlane.recycles.length === 1 && worker.state === 'running');
+    assert.equal(browsers.length, 2);
+
+    gateway.addSession(secondId);
+    await waitFor(() => controlPlane.recycles.length === 2 && worker.state === 'running');
+    assert.equal(browsers.length, 2);
+    assert.equal(browsers[0]!.closed, false);
+    assert.deepEqual(gateway.closedSessions, []);
+
+    gateway.closeSession(activeId);
+    await waitFor(() => browsers[0]!.closed);
+    gateway.addSession(thirdId);
+    await waitFor(() => controlPlane.recycles.length === 3 && worker.state === 'running');
+    assert.equal(browsers.length, 3);
+    assert.equal(browsers[1]!.closed, false);
+    assert.equal(browsers.filter(browser => !browser.closed).length, 2);
+
+    gateway.closeSession(secondId);
+    await delay(20);
+    assert.equal(browsers[1]!.closed, false);
+    gateway.closeSession(thirdId);
+    await waitFor(() => browsers[1]!.closed);
+    assert.equal(browsers[2]!.closed, false);
+    await worker.shutdown(0);
+});
+
+test('heartbeats report the sessions on both browsers during a recycle', async () => {
+    const reports: string[][] = [];
+    const controlPlane: ControlPlaneLike = {
+        register: async () => ({ id: 'worker-1' }),
+        recycle: async workerId => ({ id: workerId }),
+        heartbeat: async (_workerId, activeSessionIds) => {
+            reports.push(activeSessionIds);
+            return { status: 'available', stale_session_ids: [] };
+        },
+        setStatus: async () => undefined,
+    };
+    const gateway = new FakeGateway([activeId]);
+    const worker = createInjectedWorker(controlPlane, gateway, 5_000);
+    await worker.start();
+
+    await worker.requestDrain('control plane');
+    gateway.addSession(secondId);
+    const reportsBefore = reports.length;
+    await waitFor(() => reports.length > reportsBefore);
+
+    assert.deepEqual(reports.at(-1), [activeId, secondId]);
+    await worker.shutdown(0);
+});
+
+test('a shutdown during a recycle closes both browsers', async () => {
+    const controlPlane = new FakeControlPlane();
+    const gateway = new FakeGateway([activeId]);
+    const browsers: FakeBrowser[] = [];
+    const worker = createRecordingWorker(controlPlane, gateway, browsers, 5_000);
+    await worker.start();
+
+    await worker.requestDrain('control plane');
+    assert.equal(browsers[0]!.closed, false);
+    await worker.shutdown(0);
+
+    assert.equal(await worker.waitForExit(), 0);
+    assert.equal(browsers[0]!.closed, true);
+    assert.equal(browsers[1]!.closed, true);
 });
 
 test('the worker keeps its ID and refreshes its session budget after recycle', async () => {
     const controlPlane = new FakeControlPlane(2, 3);
-    const gateway = new FakeGateway([activeId, secondId]);
+    const gateway = new FakeGateway();
     const worker = createInjectedWorker(controlPlane, gateway, 5_000);
     await worker.start();
 
-    gateway.closeSession(activeId);
+    gateway.addSession(activeId);
     assert.equal(worker.state, 'running');
 
-    gateway.closeSession(secondId);
-    await waitFor(() => controlPlane.recycles.length === 1);
-    assert.equal(worker.state, 'running');
+    gateway.addSession(secondId);
+    await waitFor(() => controlPlane.recycles.length === 1 && worker.state === 'running');
     assert.equal(worker.workerId, 'worker-1');
     assert.equal(controlPlane.registrations.length, 1);
 
+    gateway.closeSession(activeId);
+    gateway.closeSession(secondId);
     gateway.addSession(thirdId);
     gateway.addSession(fourthId);
-    gateway.addSession(fifthId);
-    gateway.closeSession(thirdId);
-    gateway.closeSession(fourthId);
+    await delay(20);
     assert.equal(controlPlane.recycles.length, 1);
-    gateway.closeSession(fifthId);
+    gateway.addSession(fifthId);
     await waitFor(() => controlPlane.recycles.length === 2);
     await worker.shutdown(0);
 });
@@ -838,6 +961,7 @@ test('the replacement endpoint is swapped before the old browser closes', async 
     await worker.start();
 
     await worker.requestDrain('control plane');
+    await waitFor(() => events.length === 2);
     assert.deepEqual(events, ['swap:ws://127.0.0.1:12345/browser-2', 'close:browser-1']);
     await worker.shutdown(0);
 });
@@ -864,15 +988,15 @@ test('heartbeat-404 re-registration keeps the spent session budget', async () =>
         },
         setStatus: async () => undefined,
     };
-    const gateway = new FakeGateway([activeId, secondId]);
+    const gateway = new FakeGateway();
     const worker = createInjectedWorker(controlPlane, gateway, 5_000);
     await worker.start();
 
-    gateway.closeSession(activeId); // budget 1 of 2 spent
+    gateway.addSession(activeId); // budget 1 of 2 spent
     await waitFor(() => registrations === 2); // 404 re-registers, same browser
 
-    gateway.closeSession(secondId); // 2 of 2 — must drain despite re-registration
-    await waitFor(() => recycles === 1);
+    gateway.addSession(secondId); // 2 of 2 — must recycle despite re-registration
+    await waitFor(() => recycles === 1 && worker.state === 'running');
     assert.equal(registrations, 2);
     assert.equal(worker.state, 'running');
     await worker.shutdown(0);
@@ -920,7 +1044,47 @@ test('a failed browser relaunch exits for a supervisor restart', async () => {
     assert.equal(await worker.waitForExit(), 1);
 });
 
-test('drain timeout swaps the browser under a live session on the real gateway', async t => {
+test('a recycle on the real gateway serves old and new sessions until the old one closes', async t => {
+    const { worker, browsers, gateway: getGateway } = createNetworkWorker(t, 5_000);
+    await worker.start();
+    const gateway = getGateway();
+    const oldClient = await connectWebSocket(`ws://127.0.0.1:${gateway.listeningPort}`, activeId);
+    await waitFor(() => gateway.activeConnectionCount === 1);
+
+    await worker.requestDrain('control plane');
+    assert.equal(worker.state, 'running');
+    assert.equal(browsers.length, 2);
+
+    const newClient = await connectWebSocket(`ws://127.0.0.1:${gateway.listeningPort}`, secondId);
+    assert.equal(await bounded(echo(newClient, 'new'), 1_000), 'browser-2:new');
+    assert.equal(await bounded(echo(oldClient, 'old'), 1_000), 'browser-1:old');
+    assert.equal(browsers[0]!.closed, false);
+
+    oldClient.close();
+    await waitFor(() => browsers[0]!.closed);
+    assert.equal(await bounded(echo(newClient, 'still'), 1_000), 'browser-2:still');
+    newClient.terminate();
+});
+
+test('drain timeout closes an old session on the real gateway with code 1001', async t => {
+    const { worker, browsers, gateway: getGateway } = createNetworkWorker(t, 50);
+    await worker.start();
+    const gateway = getGateway();
+    const oldClient = await connectWebSocket(`ws://127.0.0.1:${gateway.listeningPort}`, activeId);
+    await waitFor(() => gateway.activeConnectionCount === 1);
+    const oldClosed = new Promise<number>(resolve => oldClient.once('close', code => resolve(code)));
+
+    await worker.requestDrain('control plane');
+
+    assert.equal(await bounded(oldClosed, 1_000), 1001);
+    await waitFor(() => browsers[0]!.closed);
+    assert.equal(browsers[1]!.closed, false);
+});
+
+function createNetworkWorker(
+    t: { after: (fn: () => Promise<void>) => void },
+    drainTimeoutMs: number,
+): { worker: BrowserWorker; browsers: NetworkBrowser[]; gateway: () => SessionGateway } {
     const browsers: NetworkBrowser[] = [];
     const launchNetworkBrowser = async (): Promise<NetworkBrowser> => {
         const server = new WebSocketServer({ host: '127.0.0.1', port: 0 });
@@ -929,15 +1093,15 @@ test('drain timeout swaps the browser under a live session on the real gateway',
         if (!address || typeof address === 'string') {
             throw new Error('browser fixture did not use a TCP port');
         }
-        server.on('connection', socket => socket.on('message', data => socket.send(data)));
+        const name = `browser-${browsers.length + 1}`;
+        server.on('connection', socket => socket.on('message', data => socket.send(`${name}:${String(data)}`)));
         const browser = new NetworkBrowser(server, `ws://127.0.0.1:${address.port}`);
         browsers.push(browser);
         return browser;
     };
-    const controlPlane = new FakeControlPlane();
     let gateway!: SessionGateway;
-    const worker = new BrowserWorker(testConfig(30, 0), {
-        controlPlane,
+    const worker = new BrowserWorker(testConfig(drainTimeoutMs, 0), {
+        controlPlane: new FakeControlPlane(),
         createGateway: (endpoint, port) => {
             gateway = new SessionGateway(endpoint, port, '127.0.0.1');
             return gateway;
@@ -951,25 +1115,14 @@ test('drain timeout swaps the browser under a live session on the real gateway',
             await browser.kill();
         }
     });
-    await worker.start();
-    const client = await connectWebSocket(`ws://${'127.0.0.1'}:${gateway.listeningPort}`, activeId);
-    await waitFor(() => gateway?.activeConnectionCount === 1);
+    return { worker, browsers, gateway: () => gateway };
+}
 
-    await worker.requestDrain('control plane');
-    await waitFor(() => controlPlane.recycles.length === 1);
-
-    assert.equal(worker.state, 'running');
-    assert.equal(browsers.length, 2);
-    assert.equal(gateway.activeConnectionCount, 0);
-    client.terminate();
-
-    // A post-swap session must reach the replacement browser end to end.
-    const postSwap = await connectWebSocket(`ws://127.0.0.1:${gateway.listeningPort}`, secondId);
-    const echoed = new Promise<string>(resolve => postSwap.once('message', data => resolve(String(data))));
-    postSwap.send('after-swap');
-    assert.equal(await bounded(echoed, 1_000), 'after-swap');
-    postSwap.terminate();
-});
+function echo(socket: WebSocket, message: string): Promise<string> {
+    const reply = new Promise<string>(resolve => socket.once('message', data => resolve(String(data))));
+    socket.send(message);
+    return reply;
+}
 
 test('startup does not resume after shutdown wins a registration race', async () => {
     let resolveRegistration!: (worker: { id: string }) => void;
@@ -1059,19 +1212,43 @@ class FakeGateway extends EventEmitter implements GatewayLike {
     readonly closedSessions: Array<{ sessionId: string; code: number }> = [];
     readonly browserEndpoints: string[] = [];
     shutdownCalled = false;
-    private readonly sessions: string[];
+    private endpoint: string | undefined;
+    private readonly sessions: Array<{ sessionId: string; endpoint: string | undefined }>;
+    private readonly idleWaiters: Array<{ endpoint: string; resolve: () => void }> = [];
 
     constructor(sessionIds: string[] = [], readonly listeningPort = 3131) {
         super();
-        this.sessions = [...sessionIds];
+        this.sessions = sessionIds.map(sessionId => ({ sessionId, endpoint: undefined }));
+    }
+
+    bind(endpoint: string): this {
+        this.endpoint = endpoint;
+        for (const session of this.sessions) {
+            session.endpoint ??= endpoint;
+        }
+        return this;
     }
 
     setBrowserEndpoint(endpoint: string): void {
         this.browserEndpoints.push(endpoint);
+        this.endpoint = endpoint;
+    }
+
+    whenEndpointIdle(endpoint: string): Promise<void> {
+        if (!this.sessions.some(session => session.endpoint === endpoint)) {
+            return Promise.resolve();
+        }
+        return new Promise(resolve => this.idleWaiters.push({ endpoint, resolve }));
+    }
+
+    closeEndpointSessions(endpoint: string, code: number): void {
+        for (const session of this.sessions.filter(candidate => candidate.endpoint === endpoint)) {
+            this.closeSession(session.sessionId, code);
+        }
     }
 
     get activeSessionIds(): string[] {
-        return [...this.sessions];
+        return this.sessions.map(session => session.sessionId);
     }
 
     get activeConnectionCount(): number {
@@ -1081,14 +1258,16 @@ class FakeGateway extends EventEmitter implements GatewayLike {
     async start(): Promise<void> {}
 
     addSession(sessionId: string): void {
-        this.sessions.push(sessionId);
+        this.sessions.push({ sessionId, endpoint: this.endpoint });
+        this.emit('sessionOpen', sessionId);
     }
 
     closeSession(sessionId: string, code = 1001): void {
-        const index = this.sessions.indexOf(sessionId);
+        const index = this.sessions.findIndex(session => session.sessionId === sessionId);
         if (index >= 0) {
             this.sessions.splice(index, 1);
             this.closedSessions.push({ sessionId, code });
+            this.releaseIdleWaiters();
             this.emit('sessionClose', sessionId);
         }
     }
@@ -1096,6 +1275,16 @@ class FakeGateway extends EventEmitter implements GatewayLike {
     async shutdown(): Promise<void> {
         this.shutdownCalled = true;
         this.sessions.splice(0);
+        this.releaseIdleWaiters();
+    }
+
+    private releaseIdleWaiters(): void {
+        for (const waiter of [...this.idleWaiters]) {
+            if (!this.sessions.some(session => session.endpoint === waiter.endpoint)) {
+                this.idleWaiters.splice(this.idleWaiters.indexOf(waiter), 1);
+                waiter.resolve();
+            }
+        }
     }
 }
 
@@ -1105,26 +1294,32 @@ class HangingShutdownGateway extends FakeGateway {
     }
 }
 
+let fakeBrowserCount = 0;
+
 class FakeBrowser extends EventEmitter implements BrowserServerLike {
     killCalled = false;
+    closed = false;
+    private readonly endpoint = `ws://127.0.0.1:12345/fake-browser-${++fakeBrowserCount}`;
 
     constructor(private readonly closeHangs = false) {
         super();
     }
 
     wsEndpoint(): string {
-        return 'ws://127.0.0.1:12345/fake-browser';
+        return this.endpoint;
     }
 
     async close(): Promise<void> {
         if (this.closeHangs) {
             await new Promise<void>(() => undefined);
         }
+        this.closed = true;
         this.emit('close');
     }
 
     async kill(): Promise<void> {
         this.killCalled = true;
+        this.closed = true;
         this.emit('close');
     }
 }
@@ -1145,7 +1340,7 @@ class WedgedBrowser extends EventEmitter implements BrowserServerLike {
 }
 
 class NetworkBrowser extends EventEmitter implements BrowserServerLike {
-    private closed = false;
+    closed = false;
 
     constructor(
         private readonly server: WebSocketServer,
@@ -1212,7 +1407,7 @@ function createWorker(serverUrl: string, gateway: FakeGateway, heartbeatTimeoutM
             undefined,
             heartbeatTimeoutMs ?? config.lifecycle.heartbeatIntervalMs,
         ),
-        createGateway: () => gateway,
+        createGateway: endpoint => gateway.bind(endpoint),
         launchBrowser: async () => new FakeBrowser(),
         exit: () => undefined,
     });
@@ -1223,10 +1418,23 @@ function createInjectedWorker(
     gateway: FakeGateway,
     drainTimeoutMs: number,
 ): BrowserWorker {
+    return createRecordingWorker(controlPlane, gateway, [], drainTimeoutMs);
+}
+
+function createRecordingWorker(
+    controlPlane: ControlPlaneLike,
+    gateway: FakeGateway,
+    browsers: FakeBrowser[],
+    drainTimeoutMs: number,
+): BrowserWorker {
     return new BrowserWorker(testConfig(drainTimeoutMs), {
         controlPlane,
-        createGateway: () => gateway,
-        launchBrowser: async () => new FakeBrowser(),
+        createGateway: endpoint => gateway.bind(endpoint),
+        launchBrowser: async () => {
+            const browser = new FakeBrowser();
+            browsers.push(browser);
+            return browser;
+        },
         exit: () => undefined,
     });
 }

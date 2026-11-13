@@ -7,6 +7,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { SessionGateway } from './gateway.js';
 
 const sessionId = '11111111-1111-4111-8111-111111111111';
+const secondSessionId = '22222222-2222-4222-8222-222222222222';
 
 test('relays text and binary frames and tracks the session map', async t => {
     const fixture = await createFixture();
@@ -195,9 +196,103 @@ test('shutting down takes precedence over duplicate session rejection', async t 
     assert.match(response, /^HTTP\/1\.1 503 /);
 });
 
+test('emits sessionOpen once for each accepted session', async t => {
+    const fixture = await createFixture();
+    t.after(() => fixture.close());
+    const opened: string[] = [];
+    fixture.gateway.on('sessionOpen', id => opened.push(id));
+
+    assert.equal(await refusedStatus(fixture.gatewayUrl, 'not-a-uuid'), 400);
+    const first = await connect(fixture.gatewayUrl, sessionId);
+    assert.equal(await refusedStatus(fixture.gatewayUrl, sessionId), 409);
+    const second = await connect(fixture.gatewayUrl, secondSessionId);
+    await waitFor(() => opened.length === 2);
+
+    assert.deepEqual(opened, [sessionId, secondSessionId]);
+    first.terminate();
+    second.terminate();
+});
+
+test('a replaced browser endpoint keeps its sessions until they close', async t => {
+    const fixture = await createFixture();
+    t.after(() => fixture.close());
+    const oldEndpoint = fixture.browserEndpoint;
+    const newEndpoint = `${oldEndpoint}/replacement`;
+    const oldClient = await connect(fixture.gatewayUrl, sessionId);
+    await fixture.nextUpstreamRequest();
+
+    fixture.gateway.setBrowserEndpoint(newEndpoint);
+    const newClient = await connect(fixture.gatewayUrl, secondSessionId);
+    t.after(() => newClient.terminate());
+    assert.equal((await fixture.nextUpstreamRequest()).url, '/replacement');
+
+    let oldIdle = false;
+    const oldIdlePromise = fixture.gateway.whenEndpointIdle(oldEndpoint).then(() => {
+        oldIdle = true;
+    });
+    const oldEcho = nextMessage(oldClient);
+    oldClient.send('still served');
+    assert.deepEqual(await oldEcho, { data: Buffer.from('still served'), isBinary: false });
+    assert.equal(oldIdle, false);
+
+    oldClient.close(1000, 'done');
+    await bounded(oldIdlePromise, 500);
+    assert.deepEqual(fixture.gateway.activeSessionIds, [secondSessionId]);
+
+    let newIdle = false;
+    void fixture.gateway.whenEndpointIdle(newEndpoint).then(() => {
+        newIdle = true;
+    });
+    await delay(20);
+    assert.equal(newIdle, false);
+});
+
+test('an endpoint is not idle while a dial to it is still connecting', async t => {
+    const fixture = await createFixture(100);
+    t.after(() => fixture.close());
+    const oldEndpoint = fixture.browserEndpoint;
+    const dialing = connect(fixture.gatewayUrl, sessionId);
+    await fixture.nextUpstreamRequest();
+
+    fixture.gateway.setBrowserEndpoint(`${oldEndpoint}/replacement`);
+    let oldIdle = false;
+    const oldIdlePromise = fixture.gateway.whenEndpointIdle(oldEndpoint).then(() => {
+        oldIdle = true;
+    });
+    const client = await dialing;
+    assert.equal(oldIdle, false);
+
+    client.close();
+    await bounded(oldIdlePromise, 500);
+});
+
+test('closing the sessions of an endpoint leaves other endpoints open', async t => {
+    const fixture = await createFixture();
+    t.after(() => fixture.close());
+    const oldEndpoint = fixture.browserEndpoint;
+    const oldClient = await connect(fixture.gatewayUrl, sessionId);
+    fixture.gateway.setBrowserEndpoint(`${oldEndpoint}/replacement`);
+    const newClient = await connect(fixture.gatewayUrl, secondSessionId);
+    t.after(() => newClient.terminate());
+    await waitFor(() => fixture.gateway.activeConnectionCount === 2);
+    const oldClosed = waitForClose(oldClient);
+
+    fixture.gateway.closeEndpointSessions(oldEndpoint, 1001, 'worker is recycling');
+
+    const close = await bounded(oldClosed, 500);
+    assert.equal(close.code, 1001);
+    assert.equal(close.reason.toString(), 'worker is recycling');
+    await bounded(fixture.gateway.whenEndpointIdle(oldEndpoint), 500);
+    assert.deepEqual(fixture.gateway.activeSessionIds, [secondSessionId]);
+    const newEcho = nextMessage(newClient);
+    newClient.send('new browser');
+    assert.deepEqual(await newEcho, { data: Buffer.from('new browser'), isBinary: false });
+});
+
 async function createFixture(upstreamHandshakeDelayMs = 0): Promise<{
     gateway: SessionGateway;
     gatewayUrl: string;
+    browserEndpoint: string;
     nextUpstreamRequest: () => Promise<IncomingMessage>;
     nextUpstreamSocket: () => Promise<WebSocket>;
     nextUpstreamMessage: () => Promise<{ data: Buffer; isBinary: boolean }>;
@@ -247,13 +342,15 @@ async function createFixture(upstreamHandshakeDelayMs = 0): Promise<{
         });
     });
 
-    const gateway = new SessionGateway(`ws://127.0.0.1:${browserAddress.port}`, 0, '127.0.0.1');
+    const browserEndpoint = `ws://127.0.0.1:${browserAddress.port}`;
+    const gateway = new SessionGateway(browserEndpoint, 0, '127.0.0.1');
     await gateway.start();
 
     let closePromise: Promise<void> | null = null;
     return {
         gateway,
         gatewayUrl: `ws://127.0.0.1:${gateway.listeningPort}`,
+        browserEndpoint,
         nextUpstreamRequest: () => {
             const request = requests.shift();
             return request ? Promise.resolve(request) : new Promise(resolve => requestWaiters.push(resolve));
