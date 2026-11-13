@@ -13,7 +13,7 @@ test('uses worker defaults', () => {
 
     assert.deepEqual(config, {
         controlPlane: { serverUrl: 'http://localhost:8080' },
-        browser: { type: 'chromium', headless: true, args: [] },
+        browser: { type: 'chromium', headless: true, args: [], blockPrivateNetworks: false },
         gateway: {
             port: 3131,
             privateHostname: os.hostname(),
@@ -118,4 +118,47 @@ test('refuses BROWSER_ARGS that turn off the browser sandbox', () => {
             flag,
         );
     }
+});
+
+test('blocks private networks only when BLOCK_PRIVATE_NETWORKS is true', () => {
+    assert.equal(parseConfig(requiredEnvironment).browser.blockPrivateNetworks, false);
+    assert.equal(parseConfig({ ...requiredEnvironment, BLOCK_PRIVATE_NETWORKS: 'true' }).browser.blockPrivateNetworks, true);
+    assert.throws(() => parseConfig({ ...requiredEnvironment, BLOCK_PRIVATE_NETWORKS: 'yes' }), ZodError);
+});
+
+test('refuses BLOCK_PRIVATE_NETWORKS for Firefox and WebKit', () => {
+    for (const browser of ['firefox', 'webkit']) {
+        assert.throws(() => parseConfig({
+            ...requiredEnvironment,
+            BROWSER_TYPE: browser,
+            BLOCK_PRIVATE_NETWORKS: 'true',
+        }), (error: unknown) => {
+            assert.ok(error instanceof ZodError);
+            assert.ok(error.issues.some(issue => issue.path[0] === 'BLOCK_PRIVATE_NETWORKS'));
+            return true;
+        });
+    }
+});
+
+test('refuses BROWSER_ARGS that change the proxy or WebRTC policy with BLOCK_PRIVATE_NETWORKS', () => {
+    for (const flag of [
+        '--proxy-server=http://proxy:3128',
+        '--proxy-pac-url=http://proxy/pac',
+        '--proxy-bypass-list=*',
+        '--proxy-auto-detect',
+        '--no-proxy-server',
+        '--force-webrtc-ip-handling-policy=default',
+    ]) {
+        const environment = { ...requiredEnvironment, BROWSER_ARGS: JSON.stringify(['--lang=de-DE', flag]) };
+        assert.deepEqual(parseConfig(environment).browser.args, ['--lang=de-DE', flag]);
+        assert.throws(() => parseConfig({ ...environment, BLOCK_PRIVATE_NETWORKS: 'true' }), (error: unknown) => {
+            assert.ok(error instanceof ZodError);
+            assert.deepEqual(error.issues.map(issue => issue.path[0]), ['BROWSER_ARGS']);
+            return true;
+        }, flag);
+    }
+    assert.deepEqual(
+        parseConfig({ ...requiredEnvironment, BROWSER_ARGS: '["--lang=de-DE"]', BLOCK_PRIVATE_NETWORKS: 'true' }).browser.args,
+        ['--lang=de-DE'],
+    );
 });

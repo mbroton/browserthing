@@ -16,6 +16,7 @@ export interface WorkerConfig {
         type: 'chromium' | 'firefox' | 'webkit';
         headless: boolean;
         args: string[];
+        blockPrivateNetworks: boolean;
     };
     gateway: {
         port: number;
@@ -40,6 +41,19 @@ const sandboxFlags = new Set([
     'disable-gpu-sandbox',
 ]);
 
+const egressGuardFlags = new Set([
+    'proxy-server',
+    'proxy-pac-url',
+    'proxy-bypass-list',
+    'proxy-auto-detect',
+    'no-proxy-server',
+    'force-webrtc-ip-handling-policy',
+]);
+
+function flagName(arg: string): string {
+    return arg.replace(/^-+/, '').split('=')[0]!;
+}
+
 const browserArgs = z.string().optional().transform((value, context) => {
     if (!value) {
         return [];
@@ -55,7 +69,7 @@ const browserArgs = z.string().optional().transform((value, context) => {
         context.addIssue({ code: 'custom', message: 'BROWSER_ARGS must be a JSON array of strings' });
         return z.NEVER;
     }
-    const refused = parsed.filter(arg => sandboxFlags.has(arg.replace(/^-+/, '').split('=')[0]!));
+    const refused = parsed.filter(arg => sandboxFlags.has(flagName(arg)));
     if (refused.length > 0) {
         context.addIssue({
             code: 'custom',
@@ -79,6 +93,26 @@ const schema = z.object({
     DRAIN_TIMEOUT: z.coerce.number().int().min(0).default(300),
     LOG_LEVEL: z.enum(logLevels).default('info'),
     LOG_FORMAT: z.enum(['json', 'text']).default('json'),
+    BLOCK_PRIVATE_NETWORKS: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
+}).superRefine((values, context) => {
+    if (!values.BLOCK_PRIVATE_NETWORKS) {
+        return;
+    }
+    if (values.BROWSER_TYPE !== 'chromium') {
+        context.addIssue({
+            code: 'custom',
+            message: 'BLOCK_PRIVATE_NETWORKS supports only BROWSER_TYPE=chromium',
+            path: ['BLOCK_PRIVATE_NETWORKS'],
+        });
+    }
+    const refused = values.BROWSER_ARGS.filter(arg => egressGuardFlags.has(flagName(arg)));
+    if (refused.length > 0) {
+        context.addIssue({
+            code: 'custom',
+            message: `BROWSER_ARGS must not change the proxy or WebRTC policy with BLOCK_PRIVATE_NETWORKS: ${refused.join(', ')}`,
+            path: ['BROWSER_ARGS'],
+        });
+    }
 });
 
 let loadedConfig: WorkerConfig | null = null;
@@ -94,6 +128,7 @@ export function parseConfig(environment: NodeJS.ProcessEnv): WorkerConfig {
             type: parsed.BROWSER_TYPE,
             headless: parsed.HEADLESS,
             args: parsed.BROWSER_ARGS,
+            blockPrivateNetworks: parsed.BLOCK_PRIVATE_NETWORKS,
         },
         gateway: {
             port: parsed.PORT,

@@ -131,6 +131,42 @@ jobs:
           push: false
           platforms: linux/amd64
 
+  egress-guard-test:
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_FILE: worker/scripts/egress-check/compose.yaml
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install check dependencies
+        working-directory: ./worker
+        run: npm ci
+
+      - name: Check that the guard blocks private networks
+        run: |
+          docker compose up -d --build --wait
+          (cd worker && EXPECT=blocked npm run egress-check)
+
+      - name: Check that private networks load without the guard
+        run: |
+          BLOCK_PRIVATE_NETWORKS=false docker compose up -d --wait worker
+          (cd worker && EXPECT=open npm run egress-check)
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop egress check services
+        if: always()
+        run: docker compose down -v
+
   integration-test:
     runs-on: ubuntu-latest
     steps:

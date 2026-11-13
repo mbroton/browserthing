@@ -7,7 +7,8 @@
     "start": "tsx src/index.ts",
     "test": "node --import tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "egress-check": "tsx scripts/egress-check.ts"
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.95.0",

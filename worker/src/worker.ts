@@ -3,6 +3,7 @@ import type { BrowserServer } from 'playwright-core';
 import { chromium, firefox, webkit } from 'playwright-core';
 import type { WorkerConfig } from './config.js';
 import { ControlPlaneClient, ControlPlaneError } from './control-plane.js';
+import { launchWithEgressGuard, type EgressGuardLaunchOptions } from './egress-guard.js';
 import { Logger } from './logger.js';
 import { SessionGateway } from './gateway.js';
 
@@ -101,7 +102,7 @@ export class BrowserWorker {
             config.controlPlane.apiKey,
             Math.min(config.lifecycle.heartbeatIntervalMs, 5_000),
         );
-        this.launchBrowser = dependencies.launchBrowser ?? launchPlaywrightServer;
+        this.launchBrowser = dependencies.launchBrowser ?? (browserConfig => launchPlaywrightServer(browserConfig, this.logger));
         this.createGateway = dependencies.createGateway ?? ((endpoint, port) => new SessionGateway(endpoint, port));
         this.logger = dependencies.logger ?? new Logger(
             config.gateway.privateHostname,
@@ -597,7 +598,7 @@ export class BrowserWorker {
     }
 }
 
-async function launchPlaywrightServer(config: WorkerConfig): Promise<BrowserServer> {
+async function launchPlaywrightServer(config: WorkerConfig, logger: Logger): Promise<BrowserServer> {
     const common = {
         host: '127.0.0.1',
         port: 0,
@@ -608,8 +609,19 @@ async function launchPlaywrightServer(config: WorkerConfig): Promise<BrowserServ
         ...(config.browser.args.length > 0 && { args: config.browser.args }),
     };
     switch (config.browser.type) {
-        case 'chromium':
-            return chromium.launchServer({ ...common, chromiumSandbox: true });
+        case 'chromium': {
+            const launch = (guard?: EgressGuardLaunchOptions) => chromium.launchServer({
+                ...common,
+                chromiumSandbox: true,
+                ...(guard && { proxy: guard.proxy, args: [...config.browser.args, ...guard.args] }),
+            });
+            if (!config.browser.blockPrivateNetworks) {
+                return launch();
+            }
+            return launchWithEgressGuard(launch, {
+                onBlocked: connection => logger.warn('Blocked a browser connection to a private network', { ...connection }),
+            });
+        }
         case 'firefox':
             return firefox.launchServer(common);
         case 'webkit':
