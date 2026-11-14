@@ -7,7 +7,8 @@ INSERT INTO workers (
     max_slots,
     status,
     last_heartbeat,
-    instance_id
+    instance_id,
+    pool
 ) VALUES (
     sqlc.arg(id),
     sqlc.arg(address),
@@ -16,13 +17,15 @@ INSERT INTO workers (
     sqlc.arg(max_slots),
     sqlc.arg(status),
     now(),
-    sqlc.narg(instance_id)
+    sqlc.narg(instance_id),
+    sqlc.arg(pool)
 )
 ON CONFLICT (instance_id) DO UPDATE
 SET address = EXCLUDED.address,
     browser = EXCLUDED.browser,
     playwright_version = EXCLUDED.playwright_version,
     max_slots = EXCLUDED.max_slots,
+    pool = EXCLUDED.pool,
     -- Registration retries must never overwrite drain or shutdown intent.
     status = CASE
         WHEN workers.status IN ('draining', 'shutting_down') THEN workers.status
@@ -91,6 +94,7 @@ CROSS JOIN LATERAL (
       AND s.status IN ('pending', 'running')
 ) AS active
 WHERE w.status = 'available'
+  AND w.pool = sqlc.arg(pool)
   AND w.browser = sqlc.arg(browser)
   AND starts_with(w.playwright_version, sqlc.arg(version_prefix)::text)
   AND w.last_heartbeat > now() - sqlc.arg(worker_ttl_microseconds)::bigint * interval '1 microsecond'
@@ -157,9 +161,10 @@ WHERE (
   )
 RETURNING w.id;
 
--- name: GetCapacityByBrowser :many
+-- name: GetCapacityByPoolAndBrowser :many
 WITH eligible_workers AS (
     SELECT
+        w.pool,
         w.browser,
         w.max_slots,
         count(s.id) AS active_count
@@ -176,32 +181,34 @@ WITH eligible_workers AS (
     GROUP BY w.id
 ), eligible AS (
     SELECT
+        pool,
         browser,
         count(*) AS workers,
         COALESCE(sum(max_slots), 0)::bigint AS max_slots,
         COALESCE(sum(GREATEST(max_slots::bigint - active_count, 0)), 0)::bigint AS available_slots
     FROM eligible_workers
-    GROUP BY browser
+    GROUP BY pool, browser
 ), active AS (
-    SELECT browser, count(*) AS active_sessions
+    SELECT pool, browser, count(*) AS active_sessions
     FROM sessions
     WHERE status IN ('pending', 'running')
-    GROUP BY browser
-), browsers AS (
-    SELECT browser FROM eligible
+    GROUP BY pool, browser
+), groups AS (
+    SELECT pool, browser FROM eligible
     UNION
-    SELECT browser FROM active
+    SELECT pool, browser FROM active
 )
 SELECT
-    browsers.browser::text AS browser,
+    groups.pool::text AS pool,
+    groups.browser::text AS browser,
     COALESCE(eligible.workers, 0)::bigint AS workers,
     COALESCE(eligible.max_slots, 0)::bigint AS max_slots,
     COALESCE(active.active_sessions, 0)::bigint AS active_sessions,
     COALESCE(eligible.available_slots, 0)::bigint AS available_slots
-FROM browsers
-LEFT JOIN eligible USING (browser)
-LEFT JOIN active USING (browser)
-ORDER BY browsers.browser;
+FROM groups
+LEFT JOIN eligible USING (pool, browser)
+LEFT JOIN active USING (pool, browser)
+ORDER BY groups.pool, groups.browser;
 
 -- name: NotifyCapacityChanged :exec
 SELECT pg_notify('capacity_changed', '');

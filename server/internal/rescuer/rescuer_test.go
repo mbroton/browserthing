@@ -215,6 +215,7 @@ func insertWorker(
 	t.Helper()
 	id := uuid.New()
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                id,
 		Address:           "ws://worker-" + id.String() + ":3000",
 		Browser:           "chromium",

@@ -6,6 +6,7 @@ import (
 )
 
 type queueClass struct {
+	pool          string
 	browser       string
 	versionPrefix string
 }
@@ -17,9 +18,10 @@ type queueTicket struct {
 }
 
 // Queue holds the session requests that wait for a free slot on this server
-// replica. Each browser and Playwright version prefix has its own line, which
-// admits requests in arrival order. Only the first request in a line receives
-// turns, so a request that no worker can serve blocks only its own line.
+// replica. Each pool, browser, and Playwright version prefix has its own line,
+// which admits requests in arrival order. Only the first request in a line
+// receives turns, so a request that no worker can serve blocks only its own
+// line.
 type Queue struct {
 	mu      sync.Mutex
 	maxSize int

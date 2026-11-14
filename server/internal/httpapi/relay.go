@@ -78,6 +78,11 @@ func (h *relayHandler) implicit(w http.ResponseWriter, request *http.Request) {
 		}
 		browser = requested
 	}
+	pool, err := scheduler.ParsePool(request.URL.Query().Get("pool"))
+	if err != nil {
+		writeRelayError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if !h.preflight(w, request) {
 		return
 	}
@@ -91,6 +96,7 @@ func (h *relayHandler) implicit(w http.ResponseWriter, request *http.Request) {
 	}
 	_, versionPrefix, _ := relay.UserAgentVersion(request.UserAgent())
 	session, err := h.scheduler.Admit(request.Context(), scheduler.ClaimRequest{
+		Pool:            pool,
 		Browser:         browser,
 		VersionPrefix:   versionPrefix,
 		CreatedByKey:    principal.KeyID,

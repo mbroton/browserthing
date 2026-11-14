@@ -87,8 +87,9 @@ replaces its browser. `MAX_SLOTS` limits the sessions on each worker.
   one in the supplied Compose file, must start it again.
 - Browser launch flags, set with
   [`BROWSER_ARGS`](/browserthing/docs/configuration/#worker), apply to the
-  whole worker. Set options for each session,
-  such as proxy and viewport, through browser contexts.
+  whole worker. To use other flags for some sessions, run those workers in a
+  separate [pool](/browserthing/docs/scaling/#worker-pools). Set options for
+  each session, such as proxy and viewport, through browser contexts.
 - BrowserThing is for your own applications and trusted clients. See the
   [security boundary](/browserthing/docs/security/).
 

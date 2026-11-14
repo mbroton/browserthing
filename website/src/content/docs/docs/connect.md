@@ -134,6 +134,22 @@ The repository's
 shows a stack with all three browser types. It builds from source and requires a
 repository checkout.
 
+## Worker pools
+
+If the deployment has [worker pools](/browserthing/docs/scaling/#worker-pools),
+add `?pool=<name>` to the connection URL. Without it, the session uses the
+pool named `default`. For example, to use a pool named `long`:
+
+```js
+const browser = await chromium.connect('ws://localhost:8080/?pool=long', {
+  headers: { Authorization: `Bearer ${process.env.BROWSERTHING_API_KEY}` },
+});
+```
+
+Combine it with a browser type as `?browser=firefox&pool=long`. A session goes
+only to workers in its pool. If the pool has no matching worker, the connection
+waits in the queue and then fails with a message that names the pool.
+
 ## API keys
 
 Clients must send an API key with each connection. For a Node.js client, use an

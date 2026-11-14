@@ -544,6 +544,7 @@ func TestServer_CreateSessionNeverOverAdmits(t *testing.T) {
 	queries := data.New(pool)
 	workerID := uuid.New()
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                workerID,
 		Address:           "ws://worker:3000",
 		Browser:           "chromium",
@@ -827,6 +828,7 @@ func TestServer_Capacity(t *testing.T) {
 		t.Fatalf("capacity browsers = %+v, want one browser", capacity.Browsers)
 	}
 	want := BrowserCapacity{
+		Pool:           "default",
 		Browser:        "chromium",
 		Workers:        2,
 		MaxSlots:       5,
@@ -1257,6 +1259,7 @@ func insertTestWorker(
 	t.Helper()
 	id := uuid.New()
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                id,
 		Address:           "ws://worker-" + id.String() + ":3000",
 		Browser:           "chromium",

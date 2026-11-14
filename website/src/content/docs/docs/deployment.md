@@ -82,7 +82,7 @@ network or another route to the server.
 
 - `GET /healthz` checks process health.
 - `GET /readyz` checks database readiness.
-- `GET /v1/capacity` reports browser slots and queue depth; it needs a key.
+- `GET /v1/capacity` reports slots per pool and browser and queue depth; it needs a key.
 
 Keep the Compose stop grace period longer than the application's shutdown
 window. The supplied file uses 60 seconds and sets worker `DRAIN_TIMEOUT=30`.

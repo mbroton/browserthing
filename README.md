@@ -134,7 +134,9 @@ Connect when a task needs a browser and close the connection when it finishes.
 BrowserThing selects a worker and handles browser startup, cleanup, and recycling.
 
 Several applications can share the same internal service. Browser capacity and
-updates are managed in one place, separate from each application's code.
+updates are managed in one place, separate from each application's code. To give
+an application its own workers, use a
+[worker pool](https://mbroton.github.io/browserthing/docs/scaling/#worker-pools).
 
 ## Warm browsers vs a browser per session
 

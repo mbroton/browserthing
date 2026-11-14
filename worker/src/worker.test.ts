@@ -236,6 +236,45 @@ test('a draining worker re-asserts drain intent after an available heartbeat', a
     await worker.shutdown(0);
 });
 
+for (const [name, pool, expected] of [
+    ['omits pool from the registration when POOL is unset', undefined, undefined],
+    ['sends pool in the registration when POOL is set', 'long', 'long'],
+] as const) {
+    test(name, async t => {
+        const bodies: Array<Record<string, unknown>> = [];
+        const server = await startControlPlane(async (request, response) => {
+            if (request.url === '/internal/workers') {
+                bodies.push(await readJSON(request));
+                sendJSON(response, 201, { id: 'worker-1' });
+                return;
+            }
+            if (request.url?.endsWith('/heartbeat')) {
+                sendJSON(response, 200, { status: 'available', stale_session_ids: [] });
+                return;
+            }
+            sendJSON(response, 200, { id: 'worker-1' });
+        });
+        t.after(() => server.close());
+
+        const config = testConfig(1_000);
+        const worker = new BrowserWorker({
+            ...config,
+            controlPlane: { serverUrl: server.url, ...(pool && { pool }) },
+        }, {
+            controlPlane: new ControlPlaneClient(server.url),
+            createGateway: endpoint => new FakeGateway().bind(endpoint),
+            launchBrowser: async () => new FakeBrowser(),
+            exit: () => undefined,
+        });
+        await worker.start();
+        await worker.shutdown(0);
+
+        assert.equal(bodies.length, 1);
+        assert.equal('pool' in bodies[0]!, expected !== undefined);
+        assert.equal(bodies[0]?.pool, expected);
+    });
+}
+
 test('heartbeat 404 registers a new worker ID', async t => {
     let registrations = 0;
     const server = await startControlPlane(async (request, response) => {

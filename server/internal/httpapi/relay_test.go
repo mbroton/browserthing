@@ -687,8 +687,8 @@ func TestRelay_VersionRoutingAndDialFailure(t *testing.T) {
 		logger := testLogger(io.Discard)
 		manager := newTestRelayManager(queries, logger, relay.Options{})
 		server := newRelayHTTPServer(t, pool, NoAuthAuthenticator{}, manager, logger, 10)
-		want := "session queue wait timed out: no worker serves chromium with Playwright 1.63; " +
-			"registered workers: chromium 1.64.1"
+		want := "session queue wait timed out: no worker serves chromium with Playwright 1.63 in pool default; " +
+			"registered workers: chromium 1.64.1 in pool default"
 
 		_, response, err := websocket.DefaultDialer.Dial(
 			wsURL(server.URL)+"/",
@@ -1851,6 +1851,7 @@ func insertRelayWorker(
 	t.Helper()
 	id := uuid.New()
 	if _, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                id,
 		Address:           address,
 		Browser:           browser,

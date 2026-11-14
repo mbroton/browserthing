@@ -16,10 +16,13 @@ components:
         max_slots:
           format: int64
           type: integer
+        pool:
+          type: string
         workers:
           format: int64
           type: integer
       required:
+        - pool
         - browser
         - workers
         - max_slots
@@ -91,6 +94,9 @@ components:
           type: string
         playwright_version:
           pattern: ^[0-9]+\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)?$
+          type: string
+        pool:
+          description: "Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default."
           type: string
       required:
         - browser
@@ -212,6 +218,9 @@ components:
           minLength: 1
           pattern: ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$
           type: string
+        pool:
+          description: "Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default."
+          type: string
       required:
         - address
         - browser
@@ -246,6 +255,8 @@ components:
           type: integer
         playwright_version:
           type: string
+        pool:
+          type: string
         status:
           enum:
             - available
@@ -257,6 +268,7 @@ components:
         - max_lifetime_sessions
         - id
         - address
+        - pool
         - browser
         - playwright_version
         - max_slots
@@ -298,6 +310,8 @@ components:
           type: string
         playwright_version:
           type: string
+        pool:
+          type: string
         started_at:
           format: date-time
           type:
@@ -319,6 +333,7 @@ components:
       required:
         - id
         - worker_id
+        - pool
         - browser
         - playwright_version
         - worker_address
@@ -364,6 +379,8 @@ components:
           type: integer
         playwright_version:
           type: string
+        pool:
+          type: string
         status:
           enum:
             - available
@@ -374,6 +391,7 @@ components:
       required:
         - id
         - address
+        - pool
         - browser
         - playwright_version
         - max_slots

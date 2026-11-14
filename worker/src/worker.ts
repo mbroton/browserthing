@@ -36,7 +36,7 @@ export interface ControlPlaneLike {
         attempts?: number,
         retryDelayMs?: number,
         signal?: AbortSignal,
-    ): Promise<{ id: string; max_lifetime_sessions?: number }>;
+    ): Promise<{ id: string; max_lifetime_sessions?: number; pool?: string }>;
     recycle(
         workerId: string,
         attempts?: number,
@@ -58,6 +58,7 @@ export interface WorkerRegistration {
     browser: 'chromium' | 'firefox' | 'webkit';
     max_slots: number;
     playwright_version: string;
+    pool?: string;
 }
 
 interface WorkerDependencies {
@@ -410,7 +411,11 @@ export class BrowserWorker {
         // servedSessions is deliberately NOT reset here: a heartbeat-404
         // re-registration keeps the same browser, so its spent budget must
         // keep counting. Only a recycle (fresh browser) resets the counter.
-        this.logger.info('Worker registered', { workerId: worker.id, sessionBudget: this.sessionBudget });
+        this.logger.info('Worker registered', {
+            workerId: worker.id,
+            pool: worker.pool,
+            sessionBudget: this.sessionBudget,
+        });
     }
 
     private registration(): WorkerRegistration {
@@ -420,6 +425,7 @@ export class BrowserWorker {
             browser: this.config.browser.type,
             max_slots: this.config.gateway.maxSlots,
             playwright_version: playwrightVersion(),
+            ...(this.config.controlPlane.pool && { pool: this.config.controlPlane.pool }),
         };
     }
 

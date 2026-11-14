@@ -23,8 +23,8 @@ The server uses these environment variables:
   Its default is `10m`.
 - `RESCUER_INTERVAL` controls the base interval between rescuer sweeps. Its
   default is `5s`; each interval has ±20% jitter.
-- `MAX_QUEUE_SIZE` limits the admission queue on each server replica. Its
-  default is `100`; `0` disables queueing.
+- `MAX_QUEUE_SIZE` limits the admission queue on each server replica, for all
+  pools together. Its default is `100`; `0` disables queueing.
 - `QUEUE_WAIT_TIMEOUT` limits how long a request can wait in this replica's
   admission queue. Its default is `30s`.
 - `MAX_LIFETIME_SESSIONS` drains a worker after this many claims. Its default
@@ -55,17 +55,24 @@ The admission queue is in memory and belongs to one server replica. The
 notifications wake queues on all replicas, and a one-second polling fallback
 keeps admission working while a notification listener reconnects.
 
-Requests for the same browser and Playwright major.minor version get slots in
-arrival order. A new request waits behind earlier requests, even when a slot is
-free. Requests for other browsers or versions wait in separate lines, so they
-do not block each other. Replicas do not share an order.
+Requests for the same pool, browser, and Playwright major.minor version get
+slots in arrival order. A new request waits behind earlier requests, even when a
+slot is free. Requests for other pools, browsers, or versions wait in separate
+lines, so they do not block each other. Replicas do not share an order.
 
-A request also waits when no registered worker serves its browser and
+A session goes only to workers in its pool. A worker sets its pool with
+`POOL=<name>`, and a client selects it with `?pool=<name>` or the `pool` field
+of `POST /v1/sessions`. Without a value, both use the pool named `default`.
+There is no fallback to another pool, also when the server moves a session
+after a failed worker dial. A pool is routing, not access control: every API
+key can use every pool.
+
+A request also waits when no registered worker serves its pool, browser, and
 Playwright major.minor version, so a worker that is still starting can take
-it. If the wait times out, the `503` message names the requested browser and
-version and lists the registered workers, for example
-`session queue wait timed out: no worker serves chromium with Playwright 1.63;
-registered workers: chromium 1.64.1`.
+it. If the wait times out, the `503` message names the requested pool, browser,
+and version and lists the registered workers, for example
+`session queue wait timed out: no worker serves chromium with Playwright 1.63 in pool default;
+registered workers: chromium 1.64.1 in pool default`.
 
 The `serve` command applies database migrations before it starts the HTTP
 server. API key commands open the database but do not apply migrations.
@@ -75,7 +82,7 @@ server. API key commands open the database but do not apply migrations.
 The WebSocket routes are not part of the OpenAPI document.
 
 ```text
-GET /?browser=chromium&token=pwd_...
+GET /?browser=chromium&pool=<name>&token=pwd_...
     -> claim a worker and create a session
     -> start the session
     -> dial the worker
@@ -92,7 +99,9 @@ Both routes also accept `Authorization: Bearer pwd_...`. The query token is
 for stock Playwright clients that cannot set an authorization header. Request
 logs contain only the URL path and never contain the query string.
 
-The optional `browser` value is `chromium`, `firefox`, or `webkit`. A client
+The optional `browser` value is `chromium`, `firefox`, or `webkit`. The
+optional `pool` value has 1 to 63 lowercase letters, digits, and hyphens, and
+starts and ends with a letter or digit. An invalid value returns `400`. A client
 user agent such as `Playwright/1.62.1` selects a worker whose version starts
 with `1.62.`. An explicit attach rejects a client with a different major or
 minor version.

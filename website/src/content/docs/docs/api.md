@@ -15,7 +15,7 @@ WebSocket routes are documented separately below.
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /v1/capacity` | Read browser capacity, free slots, and queue depth. |
+| `GET /v1/capacity` | Read capacity and free slots per pool and browser, and queue depth. |
 | `GET /v1/workers` | List worker records. |
 | `GET /healthz` | Check process health without authentication. |
 | `GET /readyz` | Check database readiness without authentication. |
@@ -32,6 +32,7 @@ For one idle Chromium worker with five slots, `GET /v1/capacity` returns
 {
   "browsers": [
     {
+      "pool": "default",
       "browser": "chromium",
       "workers": 1,
       "max_slots": 5,
@@ -50,7 +51,9 @@ For one idle Chromium worker with five slots, `GET /v1/capacity` returns
 }
 ```
 
-The `queued` capacity value belongs to the server replica that handles the
+The `browsers` array has one entry for each pool and browser type. Workers that
+do not set `POOL` are in the pool named `default`. The `totals` add all pools
+together. The `queued` value belongs to the server replica that handles the
 request. It is not a sum across replicas.
 
 ## Create and attach a session
@@ -65,12 +68,16 @@ curl -fsS http://localhost:8080/v1/sessions \
   -d '{"browser":"chromium","playwright_version":"{{playwright}}"}'
 ```
 
+To use a [worker pool](/browserthing/docs/scaling/#worker-pools), add
+`"pool":"<name>"`. Without it, the session uses the pool named `default`.
+
 Success returns `201 Created` and a session object. These are selected fields
 from an example response; IDs differ for each session:
 
 ```json
 {
   "id": "6fb174a2-4dc3-4c29-a33c-20f3b05da4bd",
+  "pool": "default",
   "browser": "chromium",
   "playwright_version": "{{playwright}}",
   "mode": "default",
@@ -152,7 +159,7 @@ closes both WebSocket peers with code `1001`. The normal delay is at most one
 ## WebSocket routes
 
 ```text
-GET /?browser=chromium
+GET /?browser=chromium&pool=<name>
   -> create session -> select worker -> relay Playwright traffic
 
 GET /sessions/{id}
@@ -161,7 +168,10 @@ GET /sessions/{id}
 
 Both routes accept `Authorization: Bearer pwd_...` or `?token=pwd_...`. The first
 route uses `DEFAULT_BROWSER_TYPE` when `browser` is omitted. Supported browser
-types are `chromium`, `firefox`, and `webkit`.
+types are `chromium`, `firefox`, and `webkit`. The first route uses the pool
+named `default` when `pool` is omitted. An unknown browser type or an invalid
+pool name returns `400 Bad Request`. An attach to `/sessions/{id}` uses the
+pool of the session.
 
 The relay forwards `User-Agent` and `x-playwright-*` headers to workers, plus
 its own `x-pwd-session-id`. It does not forward client authorization, cookies,
@@ -195,6 +205,6 @@ docker compose exec server server apikey list
 docker compose exec server server apikey revoke --id KEY_ID
 ```
 
-All valid keys have full access. Worker registration and lifecycle
+All valid keys have full access, to all pools. Worker registration and lifecycle
 routes under `/internal/workers` are for the worker protocol; their schemas are
 also included in OpenAPI.

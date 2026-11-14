@@ -80,7 +80,10 @@ services:
 
 For more workers on the same host, copy the block with a different `PORT`
 and port mapping. A worker serves one browser type; run separate workers
-for Firefox or WebKit, and clients pick one with `?browser=firefox`.
+for Firefox or WebKit, and clients pick one with `?browser=firefox`. To give a
+workload its own workers, set `POOL=<name>` on them; clients pick the pool with
+`?pool=<name>`. A worker without `POOL` serves the pool named `default`. See
+[worker pools](https://mbroton.github.io/browserthing/docs/scaling/#worker-pools).
 
 **3. Size a host.** The `MAX_SLOTS` rule above applies per host as well:
 about 2 slots per CPU for busy tasks, more when sessions mostly wait on
@@ -89,7 +92,7 @@ about 16 busy slots, so three workers at the default of 5. Give each host
 memory to match; a browser's footprint grows with every open session.
 
 **4. Know when to add workers.** `GET /v1/capacity` reports free slots per
-browser type and the queue depth. When every slot is busy, new sessions wait
+pool and browser type and the queue depth. When every slot is busy, new sessions wait
 in the queue up to `QUEUE_WAIT_TIMEOUT` (30s by default) and get a 429 once
 the queue is full (`MAX_QUEUE_SIZE`, 100). A queue that stays above zero, or
 any 429s, means the grid needs more workers — start them anywhere.
