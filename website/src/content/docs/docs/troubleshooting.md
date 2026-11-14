@@ -33,10 +33,10 @@ REST requests and failed WebSocket connections can return these statuses:
 
 | Status | Cause | Next action |
 | --- | --- | --- |
+| `400` | A WebSocket connection has an unknown `browser` or an invalid `pool` name. | Read the error message. Check the connection URL. |
 | `401` | The API key is missing, invalid, or revoked. | Give clients and workers a valid key. |
 | `409` | A session already has a client, or the attaching client's Playwright version does not match. | Read the error message. Use a new session or a matching client version. |
 | `410` | The session is completed, failed, or expired. | Create a new session. A closed session cannot be resumed. |
-| `400` | A WebSocket connection has an unknown `browser` or an invalid `pool` name. | Read the error message. Check the connection URL. |
 | `422` | A REST request has invalid fields, or requests `mode: dedicated`, which is not supported. | Check the response details. Omit `mode` or use `default`; check the browser type and version. |
 | `429` | All matching capacity is busy and the queue is full or disabled. | Close unused sessions, reduce concurrency, or add workers. |
 | `503` | A queued request timed out, the server is shutting down, or the authentication service is unavailable. | Read the error body. Check worker availability, browser/version matches, database access, and server logs. Admission errors include `Retry-After: 1`. |
