@@ -11,6 +11,7 @@ export interface WorkerConfig {
     controlPlane: {
         serverUrl: string;
         apiKey?: string;
+        pool?: string;
     };
     browser: {
         type: 'chromium' | 'firefox' | 'webkit';
@@ -83,6 +84,13 @@ const browserArgs = z.string().optional().transform((value, context) => {
 const schema = z.object({
     SERVER_URL: z.url({ protocol: /^https?$/, message: 'SERVER_URL must be an http(s) URL' }),
     WORKER_API_KEY: z.string().transform(value => value || undefined).optional(),
+    POOL: z.string()
+        .regex(
+            /^$|^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/,
+            'POOL must be 1 to 63 lowercase letters, digits, and hyphens, and start and end with a letter or digit',
+        )
+        .transform(value => value || undefined)
+        .optional(),
     BROWSER_TYPE: z.enum(['chromium', 'firefox', 'webkit']).default('chromium'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3131),
     PRIVATE_HOSTNAME: z.string().min(1).optional(),
@@ -123,6 +131,7 @@ export function parseConfig(environment: NodeJS.ProcessEnv): WorkerConfig {
         controlPlane: {
             serverUrl: parsed.SERVER_URL,
             ...(parsed.WORKER_API_KEY && { apiKey: parsed.WORKER_API_KEY }),
+            ...(parsed.POOL && { pool: parsed.POOL }),
         },
         browser: {
             type: parsed.BROWSER_TYPE,

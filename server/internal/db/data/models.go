@@ -169,6 +169,7 @@ type Session struct {
 	LastHeartbeat     time.Time
 	KeepAliveMs       pgtype.Int4
 	ConnectMetadata   []byte
+	Pool              string
 }
 
 type Worker struct {
@@ -182,4 +183,5 @@ type Worker struct {
 	LifetimeSessions  int64
 	CreatedAt         time.Time
 	InstanceID        *uuid.UUID
+	Pool              string
 }

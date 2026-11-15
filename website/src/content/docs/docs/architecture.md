@@ -37,8 +37,8 @@ outage ends connections that use that relay.
 
 ## The workers
 
-Each worker registers its address, browser type, Playwright version, and slot
-limit with the server. It sends regular heartbeats to report that it is alive.
+Each worker registers its address, pool, browser type, Playwright version, and
+slot limit with the server. It sends regular heartbeats to report that it is alive.
 
 Workers serve up to `MAX_SLOTS` sessions at once. The default is five. Sessions
 have separate browser contexts, but share the worker's browser process.
@@ -46,14 +46,18 @@ have separate browser contexts, but share the worker's browser process.
 ## A connection
 
 1. The server checks the client's API key.
-2. It claims capacity on a matching worker and creates a session record.
+2. It claims capacity on a matching worker in the requested pool and creates a
+   session record.
 3. It connects to the worker and starts the WebSocket relay.
 4. The client creates contexts and pages through Playwright.
 5. When the connection closes, the worker cleans up the session's resources.
 
 When all matching slots are busy, requests can wait in the server's admission
-queue. Requests for the same browser and Playwright version get slots in
-arrival order. Each server replica has its own queue. See
+queue. Requests for the same pool, browser, and Playwright version get slots in
+arrival order. Each server replica has its own queue. A
+[pool](/browserthing/docs/scaling/#worker-pools) is a group of workers that
+only sessions for that pool use. If the server must move a session after a
+failed worker connection, it moves it only to a worker in the same pool. See
 [queue settings](/browserthing/docs/configuration/#server).
 
 ## Worker recycling and failures

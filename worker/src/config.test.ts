@@ -162,3 +162,24 @@ test('refuses BROWSER_ARGS that change the proxy or WebRTC policy with BLOCK_PRI
         ['--lang=de-DE'],
     );
 });
+
+test('leaves POOL unset when it is absent or empty', () => {
+    assert.equal(parseConfig(requiredEnvironment).controlPlane.pool, undefined);
+    assert.equal(parseConfig({ ...requiredEnvironment, POOL: '' }).controlPlane.pool, undefined);
+});
+
+test('accepts valid POOL names', () => {
+    for (const pool of ['long', 'a', '7', 'long-eu', 'x'.repeat(63)]) {
+        assert.equal(parseConfig({ ...requiredEnvironment, POOL: pool }).controlPlane.pool, pool);
+    }
+});
+
+test('rejects invalid POOL names', () => {
+    for (const pool of ['Long', '-long', 'long-', 'long_eu', 'long eu', 'long.eu', 'x'.repeat(64)]) {
+        assert.throws(() => parseConfig({ ...requiredEnvironment, POOL: pool }), (error: unknown) => {
+            assert.ok(error instanceof ZodError);
+            assert.ok(error.issues.some(issue => issue.path[0] === 'POOL'), pool);
+            return true;
+        });
+    }
+});

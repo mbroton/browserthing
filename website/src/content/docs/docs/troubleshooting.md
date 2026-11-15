@@ -17,7 +17,7 @@ curl -fsS http://localhost:8080/readyz
 Server ready?
     -> API key accepted?
         -> Worker registered?
-            -> Browser and Playwright versions match?
+            -> Pool, browser, and Playwright versions match?
                 -> Server can reach worker?
 ```
 
@@ -33,6 +33,7 @@ REST requests and failed WebSocket connections can return these statuses:
 
 | Status | Cause | Next action |
 | --- | --- | --- |
+| `400` | A WebSocket connection has an unknown `browser` or an invalid `pool` name. | Read the error message. Check the connection URL. |
 | `401` | The API key is missing, invalid, or revoked. | Give clients and workers a valid key. |
 | `409` | A session already has a client, or the attaching client's Playwright version does not match. | Read the error message. Use a new session or a matching client version. |
 | `410` | The session is completed, failed, or expired. | Create a new session. A closed session cannot be resumed. |
@@ -65,12 +66,14 @@ queue depth, and worker health. Close client connections after use. Add workers
 if the workload needs more capacity, and measure CPU and memory before you
 increase `MAX_SLOTS`.
 
-For a `503` queue timeout, also check that a worker matches the requested browser
-and Playwright version. Free slots on a different browser or version cannot
-serve the request. If no registered worker matches, the message names the
-request and lists the registered workers, for example
-`session queue wait timed out: no worker serves chromium with Playwright 1.63;
-registered workers: chromium 1.64.1`. Admission waits up to
+For a `503` queue timeout, also check that a worker matches the requested pool,
+browser, and Playwright version. Free slots in a different pool, or on a
+different browser or version, cannot serve the request. If no registered worker
+matches, the message names the request and lists the registered workers with
+their pools, for example
+`session queue wait timed out: no worker serves chromium with Playwright 1.65 in pool long;
+registered workers: chromium 1.65.0 in pool default`. Check the spelling of
+`?pool=` against the worker's `POOL`. Admission waits up to
 `QUEUE_WAIT_TIMEOUT` (30 seconds by default). After `Retry-After`, use a limited retry count with increasing delays.
 
 ## Several sessions end together

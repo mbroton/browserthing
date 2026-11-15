@@ -67,8 +67,11 @@ register and send heartbeats to the server.
 Know these limits before you turn it on:
 
 - **Chromium only.** A Firefox or WebKit worker with this setting does not start.
-- **All sessions on the worker.** There is no allowlist. Workers that must also
-  reach internal apps need a separate BrowserThing deployment.
+- **All sessions on the worker.** There is no allowlist. Put the workers that
+  must reach internal apps in a separate
+  [worker pool](/browserthing/docs/scaling/#worker-pools) without this
+  setting. A pool is routing, not access control: every API key can use every
+  pool.
 - **Clients can turn it off.** A client that sets its own `proxy` on a browser
   context replaces the guard for that context. The guard protects you from
   page content, not from clients. `context.request` and `route.fetch()` use

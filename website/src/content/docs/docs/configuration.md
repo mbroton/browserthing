@@ -16,7 +16,7 @@ Server duration values use Go duration notation, such as `10s` or `5m`.
 | `LISTEN_ADDR` | `:8080` | HTTP and WebSocket listen address. |
 | `AUTH_DISABLED` | `false` | `true` turns off API-key checks, so every client that can reach the server has full access. Use it only for local development. |
 | `DEFAULT_BROWSER_TYPE` | `chromium` | Browser selected when a connection omits `?browser=`. |
-| `MAX_QUEUE_SIZE` | `100` | Maximum waiting requests per server replica. `0` disables queueing. |
+| `MAX_QUEUE_SIZE` | `100` | Maximum waiting requests per server replica, for all pools together. `0` disables queueing. |
 | `QUEUE_WAIT_TIMEOUT` | `30s` | Maximum wait for a worker slot. |
 | `MAX_LIFETIME_SESSIONS` | `50` | Session claims before a worker recycles its browser. `0` disables recycling. |
 | `WORKER_HEARTBEAT_TTL` | `30s` | Time before an available worker with no heartbeat becomes stalled. |
@@ -62,6 +62,7 @@ Worker time values are integer **seconds**.
 | `SERVER_URL` | Required | Server HTTP or HTTPS URL. |
 | `WORKER_API_KEY` | Unset | Bearer key for server requests. Required unless the server sets `AUTH_DISABLED=true`. |
 | `BROWSER_TYPE` | `chromium` | One of `chromium`, `firefox`, or `webkit`. |
+| `POOL` | Unset | Worker pool that this worker serves. Clients select it with `?pool=<name>`. Unset means the pool named `default`. See [worker pools](/browserthing/docs/scaling/#worker-pools). |
 | `PORT` | `3131` | Port for browser relay connections. |
 | `PRIVATE_HOSTNAME` | Machine hostname | Address advertised to the server. It must be reachable from the server. |
 | `MAX_SLOTS` | `5` | Concurrent sessions per worker, from 1 to 1024. |
@@ -72,6 +73,9 @@ Worker time values are integer **seconds**.
 | `DRAIN_TIMEOUT` | `300` | Maximum wait for open sessions on the old browser after a recycle, or during shutdown. Remaining sessions close when it expires. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, or `error`. |
 | `LOG_FORMAT` | `json` | One of `json` or `text`. |
+
+A pool name has 1 to 63 lowercase letters, digits, and hyphens, and starts and
+ends with a letter or digit. An invalid `POOL` stops the worker at start.
 
 The supplied Compose file sets `DRAIN_TIMEOUT=30` and a 60-second container
 stop grace period. If you increase the drain timeout, keep the stop grace

@@ -19,12 +19,12 @@ WITH updated AS (
     SET status = 'completed'
     WHERE id = $1
       AND status = 'running'
-    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata
+    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata, sessions.pool
 ), notified AS (
     SELECT pg_notify('capacity_changed', '')
     FROM updated
 )
-SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata
+SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata, updated.pool
 FROM updated
 CROSS JOIN notified
 `
@@ -44,6 +44,7 @@ type CompleteSessionRow struct {
 	LastHeartbeat     time.Time
 	KeepAliveMs       pgtype.Int4
 	ConnectMetadata   []byte
+	Pool              string
 }
 
 func (q *Queries) CompleteSession(ctx context.Context, id uuid.UUID) (CompleteSessionRow, error) {
@@ -64,6 +65,7 @@ func (q *Queries) CompleteSession(ctx context.Context, id uuid.UUID) (CompleteSe
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -131,12 +133,12 @@ WITH updated AS (
     SET status = 'failed'
     WHERE id = $1
       AND status IN ('pending', 'running')
-    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata
+    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata, sessions.pool
 ), notified AS (
     SELECT pg_notify('capacity_changed', '')
     FROM updated
 )
-SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata
+SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata, updated.pool
 FROM updated
 CROSS JOIN notified
 `
@@ -156,6 +158,7 @@ type FailSessionRow struct {
 	LastHeartbeat     time.Time
 	KeepAliveMs       pgtype.Int4
 	ConnectMetadata   []byte
+	Pool              string
 }
 
 func (q *Queries) FailSession(ctx context.Context, id uuid.UUID) (FailSessionRow, error) {
@@ -176,6 +179,7 @@ func (q *Queries) FailSession(ctx context.Context, id uuid.UUID) (FailSessionRow
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -224,7 +228,7 @@ func (q *Queries) FailUnreportedWorkerSessions(ctx context.Context, arg FailUnre
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+SELECT id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 FROM sessions
 WHERE id = $1
 `
@@ -247,6 +251,7 @@ func (q *Queries) GetSession(ctx context.Context, id uuid.UUID) (Session, error)
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -255,6 +260,7 @@ const insertClaimedSession = `-- name: InsertClaimedSession :one
 INSERT INTO sessions (
     id,
     worker_id,
+    pool,
     browser,
     playwright_version,
     worker_address,
@@ -270,19 +276,21 @@ INSERT INTO sessions (
     $3,
     $4,
     $5,
+    $6,
     'default',
     'pending',
-    $6,
-    now() + $7::bigint * interval '1 microsecond',
+    $7,
+    now() + $8::bigint * interval '1 microsecond',
     now(),
-    COALESCE($8::jsonb, '{}'::jsonb)
+    COALESCE($9::jsonb, '{}'::jsonb)
 )
-RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 `
 
 type InsertClaimedSessionParams struct {
 	ID                     uuid.UUID
 	WorkerID               uuid.UUID
+	Pool                   string
 	Browser                string
 	PlaywrightVersion      string
 	WorkerAddress          string
@@ -295,6 +303,7 @@ func (q *Queries) InsertClaimedSession(ctx context.Context, arg InsertClaimedSes
 	row := q.db.QueryRow(ctx, insertClaimedSession,
 		arg.ID,
 		arg.WorkerID,
+		arg.Pool,
 		arg.Browser,
 		arg.PlaywrightVersion,
 		arg.WorkerAddress,
@@ -318,12 +327,13 @@ func (q *Queries) InsertClaimedSession(ctx context.Context, arg InsertClaimedSes
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
 
 const listSessionsByWorker = `-- name: ListSessionsByWorker :many
-SELECT id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+SELECT id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 FROM sessions
 WHERE worker_id = $1
 ORDER BY created_at, id
@@ -360,6 +370,7 @@ func (q *Queries) ListSessionsByWorker(ctx context.Context, arg ListSessionsByWo
 			&i.LastHeartbeat,
 			&i.KeepAliveMs,
 			&i.ConnectMetadata,
+			&i.Pool,
 		); err != nil {
 			return nil, err
 		}
@@ -414,7 +425,7 @@ SET worker_id = $1,
     worker_address = $3
 WHERE id = $4
   AND status = 'running'
-RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 `
 
 type ReassignRunningSessionParams struct {
@@ -449,6 +460,7 @@ func (q *Queries) ReassignRunningSession(ctx context.Context, arg ReassignRunnin
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -458,7 +470,7 @@ UPDATE sessions
 SET last_heartbeat = now()
 WHERE id = $1
   AND status = 'running'
-RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 `
 
 func (q *Queries) RenewSessionHeartbeat(ctx context.Context, id uuid.UUID) (Session, error) {
@@ -479,6 +491,7 @@ func (q *Queries) RenewSessionHeartbeat(ctx context.Context, id uuid.UUID) (Sess
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -491,7 +504,7 @@ SET status = 'running',
     expires_at = NULL
 WHERE id = $1
   AND status = 'pending'
-RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata
+RETURNING id, worker_id, browser, playwright_version, worker_address, mode, status, created_by_key, created_at, started_at, expires_at, last_heartbeat, keep_alive_ms, connect_metadata, pool
 `
 
 // StartSession is intentionally unused until the PR 4 relay attaches sessions.
@@ -513,6 +526,7 @@ func (q *Queries) StartSession(ctx context.Context, id uuid.UUID) (Session, erro
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }
@@ -523,12 +537,12 @@ WITH updated AS (
     SET status = 'completed'
     WHERE id = $1
       AND status IN ('pending', 'running')
-    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata
+    RETURNING sessions.id, sessions.worker_id, sessions.browser, sessions.playwright_version, sessions.worker_address, sessions.mode, sessions.status, sessions.created_by_key, sessions.created_at, sessions.started_at, sessions.expires_at, sessions.last_heartbeat, sessions.keep_alive_ms, sessions.connect_metadata, sessions.pool
 ), notified AS (
     SELECT pg_notify('capacity_changed', '')
     FROM updated
 )
-SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata
+SELECT updated.id, updated.worker_id, updated.browser, updated.playwright_version, updated.worker_address, updated.mode, updated.status, updated.created_by_key, updated.created_at, updated.started_at, updated.expires_at, updated.last_heartbeat, updated.keep_alive_ms, updated.connect_metadata, updated.pool
 FROM updated
 CROSS JOIN notified
 `
@@ -548,6 +562,7 @@ type TerminateSessionRow struct {
 	LastHeartbeat     time.Time
 	KeepAliveMs       pgtype.Int4
 	ConnectMetadata   []byte
+	Pool              string
 }
 
 func (q *Queries) TerminateSession(ctx context.Context, id uuid.UUID) (TerminateSessionRow, error) {
@@ -568,6 +583,7 @@ func (q *Queries) TerminateSession(ctx context.Context, id uuid.UUID) (Terminate
 		&i.LastHeartbeat,
 		&i.KeepAliveMs,
 		&i.ConnectMetadata,
+		&i.Pool,
 	)
 	return i, err
 }

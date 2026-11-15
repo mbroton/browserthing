@@ -495,8 +495,8 @@ func TestScheduler_Queue(t *testing.T) {
 				name:    "other Playwright version",
 				workers: []workerSpec{{playwrightVersion: "1.62.1"}},
 				request: ClaimRequest{Browser: "chromium", VersionPrefix: "1.63."},
-				want: "session queue wait timed out: no worker serves chromium with Playwright 1.63; " +
-					"registered workers: chromium 1.62.1",
+				want: "session queue wait timed out: no worker serves chromium with Playwright 1.63 in pool default; " +
+					"registered workers: chromium 1.62.1 in pool default",
 			},
 			{
 				name: "other browsers",
@@ -506,14 +506,31 @@ func TestScheduler_Queue(t *testing.T) {
 					{browser: "chromium", playwrightVersion: "1.62.1"},
 				},
 				request: ClaimRequest{Browser: "firefox"},
-				want: "session queue wait timed out: no worker serves firefox; " +
-					"registered workers: chromium 1.62.1, webkit 1.62.1",
+				want: "session queue wait timed out: no worker serves firefox in pool default; " +
+					"registered workers: chromium 1.62.1 in pool default, webkit 1.62.1 in pool default",
 			},
 			{
 				name:    "no workers",
 				request: ClaimRequest{Browser: "chromium", VersionPrefix: "1.62."},
-				want: "session queue wait timed out: no worker serves chromium with Playwright 1.62; " +
+				want: "session queue wait timed out: no worker serves chromium with Playwright 1.62 in pool default; " +
 					"no workers are registered",
+			},
+			{
+				name: "named pool without workers",
+				workers: []workerSpec{
+					{pool: "default", playwrightVersion: "1.62.1"},
+					{pool: "fast", playwrightVersion: "1.62.1"},
+				},
+				request: ClaimRequest{Pool: "long", Browser: "chromium", VersionPrefix: "1.62."},
+				want: "session queue wait timed out: no worker serves chromium with Playwright 1.62 in pool long; " +
+					"registered workers: chromium 1.62.1 in pool default, chromium 1.62.1 in pool fast",
+			},
+			{
+				name:    "default pool with only named pool workers",
+				workers: []workerSpec{{pool: "long", playwrightVersion: "1.62.1"}},
+				request: ClaimRequest{Browser: "chromium"},
+				want: "session queue wait timed out: no worker serves chromium in pool default; " +
+					"registered workers: chromium 1.62.1 in pool long",
 			},
 		}
 		for _, test := range tests {
@@ -1337,6 +1354,7 @@ func (t *pauseAfterRollbackTracer) TraceQueryEnd(
 }
 
 type workerSpec struct {
+	pool              string
 	browser           string
 	playwrightVersion string
 	status            data.WorkerStatus
@@ -1363,6 +1381,9 @@ func insertWorker(
 	spec workerSpec,
 ) uuid.UUID {
 	t.Helper()
+	if spec.pool == "" {
+		spec.pool = "default"
+	}
 	if spec.browser == "" {
 		spec.browser = "chromium"
 	}
@@ -1379,6 +1400,7 @@ func insertWorker(
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
 		ID:                id,
 		Address:           "ws://worker-" + id.String() + ":3000",
+		Pool:              spec.pool,
 		Browser:           spec.browser,
 		PlaywrightVersion: spec.playwrightVersion,
 		MaxSlots:          spec.maxSlots,
@@ -1420,11 +1442,11 @@ func insertSession(
 		t.Context(),
 		`INSERT INTO sessions (
     id, worker_id, browser, playwright_version, worker_address,
-    mode, status, started_at, last_heartbeat
+    mode, status, started_at, last_heartbeat, pool
 ) VALUES (
     $1, $2, $3, $4, $5, 'default', $6,
     CASE WHEN $6::session_status = 'running' THEN now() END,
-    now()
+    now(), $7
 )`,
 		id,
 		workerID,
@@ -1432,6 +1454,7 @@ func insertSession(
 		worker.PlaywrightVersion,
 		worker.Address,
 		status,
+		worker.Pool,
 	)
 	if err != nil {
 		t.Fatalf("inserting test session: %v", err)

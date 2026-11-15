@@ -15,6 +15,7 @@ export type BrowserCapacity = {
     available_slots: number;
     browser: string;
     max_slots: number;
+    pool: string;
     workers: number;
 };
 
@@ -48,6 +49,10 @@ export type CreateSessionInputBody = {
     };
     mode?: 'default' | 'dedicated';
     playwright_version?: string;
+    /**
+     * Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default.
+     */
+    pool?: string;
 };
 
 export type ErrorDetail = {
@@ -111,6 +116,10 @@ export type RegisterWorkerInputBody = {
     instance_id?: string;
     max_slots: number;
     playwright_version: string;
+    /**
+     * Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default.
+     */
+    pool?: string;
 };
 
 export type RegisteredWorker = {
@@ -126,6 +135,7 @@ export type RegisteredWorker = {
     max_lifetime_sessions: number;
     max_slots: number;
     playwright_version: string;
+    pool: string;
     status: 'available' | 'draining' | 'stalled' | 'shutting_down';
 };
 
@@ -142,6 +152,7 @@ export type Session = {
     last_heartbeat: string;
     mode: 'default' | 'dedicated';
     playwright_version: string;
+    pool: string;
     started_at: string | null;
     status: 'pending' | 'running' | 'completed' | 'failed' | 'expired';
     worker_address: string;
@@ -161,6 +172,7 @@ export type Worker = {
     lifetime_sessions: number;
     max_slots: number;
     playwright_version: string;
+    pool: string;
     status: 'available' | 'draining' | 'stalled' | 'shutting_down';
 };
 

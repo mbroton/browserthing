@@ -51,6 +51,16 @@ docker compose ps
 The server applies database migrations when it starts. Check server and worker
 logs, then run a client connection using a compatible Playwright version.
 
+## Worker pools
+
+The migration puts existing workers and sessions in the pool named `default`.
+Workers and clients that set no pool work as before.
+
+Upgrade the server before you set `POOL` on any worker. A server without pool
+support refuses the registration of a worker that sets `POOL`: the worker logs
+a `422` error and stops. A worker without `POOL` registers with older and newer
+servers. See [worker pools](/browserthing/docs/scaling/#worker-pools).
+
 ## When the Playwright version changes
 
 The client and worker need matching Playwright major and minor versions.
@@ -63,8 +73,8 @@ for behavior changes that can affect your browser code.
 A client with the previous version cannot use the new workers. It waits in the
 server queue for `QUEUE_WAIT_TIMEOUT` (default 30 seconds). Then it gets `503`
 with a message such as
-`session queue wait timed out: no worker serves chromium with Playwright 1.63;
-registered workers: chromium 1.64.1`.
+`session queue wait timed out: no worker serves chromium with Playwright 1.63 in pool default;
+registered workers: chromium 1.64.1 in pool default`.
 
 ### Move clients gradually
 

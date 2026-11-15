@@ -133,6 +133,7 @@ func registerPublicRoutes(
 ) {
 	type createSessionInput struct {
 		Body struct {
+			Pool              string           `json:"pool,omitempty" doc:"Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default."`
 			Browser           string           `json:"browser" enum:"chromium,firefox,webkit"`
 			Mode              data.SessionMode `json:"mode,omitempty" default:"default" enum:"default,dedicated"`
 			PlaywrightVersion string           `json:"playwright_version,omitempty" pattern:"^[0-9]+\\.[0-9]+(\\.[0-9]+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?)?$"`
@@ -159,6 +160,10 @@ func registerPublicRoutes(
 		if input.Body.Mode == data.SessionModeDedicated {
 			return nil, huma.Error422UnprocessableEntity("dedicated mode is not available yet")
 		}
+		pool, err := scheduler.ParsePool(input.Body.Pool)
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity(err.Error())
+		}
 		metadata := input.Body.ConnectMetadata
 		if metadata == nil {
 			metadata = map[string]any{}
@@ -183,6 +188,7 @@ func registerPublicRoutes(
 			}
 		}
 		session, err := sessionScheduler.Admit(ctx, scheduler.ClaimRequest{
+			Pool:            pool,
 			Browser:         input.Body.Browser,
 			VersionPrefix:   versionPrefix,
 			CreatedByKey:    PrincipalFromContext(ctx).KeyID,
@@ -329,6 +335,7 @@ func registerPublicRoutes(
 		}
 		for _, browser := range capacity.Browsers {
 			response.Browsers = append(response.Browsers, BrowserCapacity{
+				Pool:           browser.Pool,
 				Browser:        browser.Browser,
 				Workers:        browser.Workers,
 				MaxSlots:       browser.MaxSlots,
@@ -358,6 +365,7 @@ func registerWorkerRoutes(
 			PlaywrightVersion string     `json:"playwright_version" pattern:"^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$" minLength:"1" maxLength:"64"`
 			MaxSlots          int32      `json:"max_slots" minimum:"1" maximum:"1024"`
 			InstanceID        *uuid.UUID `json:"instance_id,omitempty" format:"uuid"`
+			Pool              string     `json:"pool,omitempty" doc:"Worker pool: 1 to 63 lowercase letters, digits, and hyphens, starting and ending with a letter or digit. Absent or empty means the pool named default."`
 		}
 	}
 	type registeredWorker struct {
@@ -387,6 +395,10 @@ func registerWorkerRoutes(
 		if parsed, err := url.Parse(input.Body.Address); err != nil || parsed.Hostname() == "" {
 			return nil, huma.Error422UnprocessableEntity("address must include a hostname")
 		}
+		workerPool, err := scheduler.ParsePool(input.Body.Pool)
+		if err != nil {
+			return nil, huma.Error422UnprocessableEntity(err.Error())
+		}
 		worker, err := registerWorker(ctx, pool, queries, data.RegisterWorkerParams{
 			ID:                uuid.New(),
 			Address:           input.Body.Address,
@@ -395,6 +407,7 @@ func registerWorkerRoutes(
 			MaxSlots:          input.Body.MaxSlots,
 			Status:            data.WorkerStatusAvailable,
 			InstanceID:        input.Body.InstanceID,
+			Pool:              workerPool,
 		})
 		if err != nil {
 			return nil, internalError(logger, "register worker", err)

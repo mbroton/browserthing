@@ -48,6 +48,7 @@ type Options struct {
 }
 
 type ClaimRequest struct {
+	Pool            string
 	Browser         string
 	VersionPrefix   string
 	CreatedByKey    *uuid.UUID
@@ -55,7 +56,7 @@ type ClaimRequest struct {
 }
 
 type Capacity struct {
-	Browsers     []data.GetCapacityByBrowserRow
+	Browsers     []data.GetCapacityByPoolAndBrowserRow
 	Queued       int
 	MaxQueueSize int
 }
@@ -118,6 +119,7 @@ func (s *Scheduler) MaxLifetimeSessions() int64 {
 }
 
 func (s *Scheduler) Claim(ctx context.Context, request ClaimRequest) (data.Session, error) {
+	request = request.withDefaultPool()
 	excluded := []uuid.UUID{}
 	for attempt := range maxClaimAttempts {
 		session, fullWorkerID, err := s.claimOnce(ctx, request, excluded)
@@ -171,10 +173,18 @@ func (s *Scheduler) Reassign(
 	return data.Session{}, ErrNoCapacity
 }
 
+func (r ClaimRequest) withDefaultPool() ClaimRequest {
+	if r.Pool == "" {
+		r.Pool = DefaultPool
+	}
+	return r
+}
+
 // NoMatchingWorkerError is returned when the queue wait times out and no
-// registered worker serves the requested browser and Playwright version.
-// It wraps ErrWaitTimeout.
+// registered worker serves the requested pool, browser, and Playwright
+// version. It wraps ErrWaitTimeout.
 type NoMatchingWorkerError struct {
+	Pool          string
 	Browser       string
 	VersionPrefix string
 	Registered    []string
@@ -185,6 +195,7 @@ func (e *NoMatchingWorkerError) Error() string {
 	if e.VersionPrefix != "" {
 		requested += " with Playwright " + strings.TrimSuffix(e.VersionPrefix, ".")
 	}
+	requested += " in pool " + e.Pool
 	registered := "no workers are registered"
 	if len(e.Registered) > 0 {
 		registered = "registered workers: " + strings.Join(e.Registered, ", ")
@@ -197,10 +208,11 @@ func (e *NoMatchingWorkerError) Unwrap() error {
 }
 
 // Admit claims a session, waiting in the admission queue when no slot is free.
-// Requests for the same browser and Playwright version prefix are admitted in
-// arrival order. A request claims a slot at once only when no request of its
-// class waits.
+// Requests for the same pool, browser, and Playwright version prefix are
+// admitted in arrival order. A request claims a slot at once only when no
+// request of its class waits.
 func (s *Scheduler) Admit(ctx context.Context, request ClaimRequest) (data.Session, error) {
+	request = request.withDefaultPool()
 	session, err := s.admit(ctx, request)
 	if errors.Is(err, ErrWaitTimeout) {
 		return data.Session{}, s.explainWaitTimeout(ctx, request)
@@ -216,14 +228,16 @@ func (s *Scheduler) explainWaitTimeout(ctx context.Context, request ClaimRequest
 	}
 	registered := []string{}
 	for _, worker := range workers {
-		if worker.Browser == request.Browser &&
+		if worker.Pool == request.Pool &&
+			worker.Browser == request.Browser &&
 			strings.HasPrefix(worker.PlaywrightVersion, request.VersionPrefix) {
 			return ErrWaitTimeout
 		}
-		registered = append(registered, worker.Browser+" "+worker.PlaywrightVersion)
+		registered = append(registered, worker.Browser+" "+worker.PlaywrightVersion+" in pool "+worker.Pool)
 	}
 	slices.Sort(registered)
 	return &NoMatchingWorkerError{
+		Pool:          request.Pool,
 		Browser:       request.Browser,
 		VersionPrefix: request.VersionPrefix,
 		Registered:    slices.Compact(registered),
@@ -234,7 +248,7 @@ func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Sessi
 	if s.isDraining() {
 		return data.Session{}, ErrDraining
 	}
-	class := queueClass{browser: request.Browser, versionPrefix: request.VersionPrefix}
+	class := queueClass{pool: request.Pool, browser: request.Browser, versionPrefix: request.VersionPrefix}
 	if !s.queue.hasWaiters(class) {
 		session, err := s.Claim(ctx, request)
 		if err == nil {
@@ -312,7 +326,7 @@ func (s *Scheduler) admit(ctx context.Context, request ClaimRequest) (data.Sessi
 }
 
 func (s *Scheduler) Capacity(ctx context.Context) (Capacity, error) {
-	rows, err := s.queries.GetCapacityByBrowser(ctx, data.GetCapacityByBrowserParams{
+	rows, err := s.queries.GetCapacityByPoolAndBrowser(ctx, data.GetCapacityByPoolAndBrowserParams{
 		WorkerTtlMicroseconds: s.workerTTL.Microseconds(),
 		MaxLifetimeSessions:   s.maxLifetimeSessions,
 	})
@@ -416,6 +430,7 @@ func (s *Scheduler) claimOnce(
 	queries := s.queries.WithTx(tx)
 
 	worker, err := queries.SelectClaimableWorker(ctx, data.SelectClaimableWorkerParams{
+		Pool:                  request.Pool,
 		Browser:               request.Browser,
 		VersionPrefix:         request.VersionPrefix,
 		WorkerTtlMicroseconds: s.workerTTL.Microseconds(),
@@ -440,6 +455,7 @@ func (s *Scheduler) claimOnce(
 	session, err := queries.InsertClaimedSession(ctx, data.InsertClaimedSessionParams{
 		ID:                     uuid.New(),
 		WorkerID:               worker.ID,
+		Pool:                   worker.Pool,
 		Browser:                worker.Browser,
 		PlaywrightVersion:      worker.PlaywrightVersion,
 		WorkerAddress:          worker.Address,
@@ -496,6 +512,7 @@ func (s *Scheduler) reassignOnce(
 	}
 
 	worker, err := queries.SelectClaimableWorker(ctx, data.SelectClaimableWorkerParams{
+		Pool:                  session.Pool,
 		Browser:               session.Browser,
 		VersionPrefix:         versionPrefix,
 		WorkerTtlMicroseconds: s.workerTTL.Microseconds(),

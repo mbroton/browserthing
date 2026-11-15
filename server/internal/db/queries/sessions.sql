@@ -76,6 +76,7 @@ WHERE worker_id = $1
 INSERT INTO sessions (
     id,
     worker_id,
+    pool,
     browser,
     playwright_version,
     worker_address,
@@ -88,6 +89,7 @@ INSERT INTO sessions (
 ) VALUES (
     sqlc.arg(id),
     sqlc.arg(worker_id),
+    sqlc.arg(pool),
     sqlc.arg(browser),
     sqlc.arg(playwright_version),
     sqlc.arg(worker_address),

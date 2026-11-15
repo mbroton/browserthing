@@ -70,6 +70,47 @@ func TestMigrate(t *testing.T) {
 	}
 }
 
+func TestMigratePoolsKeepsExistingRowsInDefaultPool(t *testing.T) {
+	pool := newTestPool(t)
+	sqlDB := stdlib.OpenDBFromPool(pool)
+	defer sqlDB.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrations.Files)
+	if err != nil {
+		t.Fatalf("creating migration provider: %v", err)
+	}
+	if _, err := provider.UpTo(t.Context(), 2); err != nil {
+		t.Fatalf("UpTo(2) returned an error: %v", err)
+	}
+	workerID := uuid.New()
+	sessionID := uuid.New()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO workers (
+    id, address, browser, playwright_version, max_slots, status, last_heartbeat
+) VALUES ($1, 'ws://worker:3000', 'chromium', '1.62.1', 1, 'available', now())`, workerID); err != nil {
+		t.Fatalf("inserting pre-pool worker: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO sessions (
+    id, worker_id, browser, playwright_version, worker_address, mode, status, last_heartbeat
+) VALUES ($1, $2, 'chromium', '1.62.1', 'ws://worker:3000', 'default', 'pending', now())`, sessionID, workerID); err != nil {
+		t.Fatalf("inserting pre-pool session: %v", err)
+	}
+
+	if err := db.Migrate(t.Context(), pool); err != nil {
+		t.Fatalf("Migrate() returned an error: %v", err)
+	}
+	queries := data.New(pool)
+	worker, err := queries.GetWorker(t.Context(), workerID)
+	if err != nil {
+		t.Fatalf("GetWorker() returned an error: %v", err)
+	}
+	session, err := queries.GetSession(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession() returned an error: %v", err)
+	}
+	if worker.Pool != "default" || session.Pool != "default" {
+		t.Fatalf("migrated pools = worker %q, session %q; want default and default", worker.Pool, session.Pool)
+	}
+}
+
 func TestMigrateConcurrent(t *testing.T) {
 	const migrationCount = 8
 
@@ -150,6 +191,7 @@ func TestQueries(t *testing.T) {
 
 	registerBefore := databaseTime(t, pool)
 	worker, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                workerID,
 		Address:           "ws://worker:3000",
 		Browser:           "chromium",
@@ -418,6 +460,7 @@ func TestRegisterWorkerInstanceID(t *testing.T) {
 	instanceID := uuid.New()
 	firstID := uuid.New()
 	params := data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                firstID,
 		Address:           "ws://worker-a:3000",
 		Browser:           "chromium",
@@ -515,6 +558,7 @@ func TestStallWorkerStatusGuard(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			workerID := uuid.New()
 			_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+				Pool:              "default",
 				ID:                workerID,
 				Address:           "ws://worker-" + workerID.String() + ":3000",
 				Browser:           "chromium",
@@ -555,6 +599,7 @@ func TestEnumConstraints(t *testing.T) {
 	workerID := testUUID(10)
 
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                workerID,
 		Address:           "ws://worker:3000",
 		Browser:           "chromium",
@@ -861,6 +906,7 @@ func insertWorker(t *testing.T, queries *data.Queries, id uuid.UUID) {
 	t.Helper()
 
 	_, err := queries.RegisterWorker(t.Context(), data.RegisterWorkerParams{
+		Pool:              "default",
 		ID:                id,
 		Address:           "ws://worker:3000",
 		Browser:           "chromium",

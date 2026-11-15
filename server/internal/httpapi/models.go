@@ -13,6 +13,7 @@ import (
 type Worker struct {
 	ID                uuid.UUID         `json:"id" format:"uuid"`
 	Address           string            `json:"address"`
+	Pool              string            `json:"pool"`
 	Browser           string            `json:"browser"`
 	PlaywrightVersion string            `json:"playwright_version"`
 	MaxSlots          int32             `json:"max_slots"`
@@ -25,6 +26,7 @@ type Worker struct {
 type Session struct {
 	ID                uuid.UUID          `json:"id" format:"uuid"`
 	WorkerID          uuid.UUID          `json:"worker_id" format:"uuid"`
+	Pool              string             `json:"pool"`
 	Browser           string             `json:"browser"`
 	PlaywrightVersion string             `json:"playwright_version"`
 	WorkerAddress     string             `json:"worker_address"`
@@ -40,6 +42,7 @@ type Session struct {
 }
 
 type BrowserCapacity struct {
+	Pool           string `json:"pool"`
 	Browser        string `json:"browser"`
 	Workers        int64  `json:"workers"`
 	MaxSlots       int64  `json:"max_slots"`
@@ -65,6 +68,7 @@ func workerFromData(worker data.Worker) Worker {
 	return Worker{
 		ID:                worker.ID,
 		Address:           worker.Address,
+		Pool:              worker.Pool,
 		Browser:           worker.Browser,
 		PlaywrightVersion: worker.PlaywrightVersion,
 		MaxSlots:          worker.MaxSlots,
@@ -90,6 +94,7 @@ func sessionFromData(session data.Session) (Session, error) {
 	return Session{
 		ID:                session.ID,
 		WorkerID:          session.WorkerID,
+		Pool:              session.Pool,
 		Browser:           session.Browser,
 		PlaywrightVersion: session.PlaywrightVersion,
 		WorkerAddress:     session.WorkerAddress,
